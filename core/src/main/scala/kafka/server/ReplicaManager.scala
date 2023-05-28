@@ -71,6 +71,7 @@ import scala.jdk.CollectionConverters._
 
 /*
  * Result metadata of a log append operation on the log
+ * 副本管理器执行副本日志写入操作后返回的结果信息
  */
 case class LogAppendResult(info: LogAppendInfo, exception: Option[Throwable] = None) {
   def error: Errors = exception match {
@@ -78,7 +79,7 @@ case class LogAppendResult(info: LogAppendInfo, exception: Option[Throwable] = N
     case Some(e) => Errors.forException(e)
   }
 }
-
+// 副本管理器执行副本日志删除操作后返回的结果信息
 case class LogDeleteRecordsResult(requestedOffset: Long, lowWatermark: Long, exception: Option[Throwable] = None) {
   def error: Errors = exception match {
     case None => Errors.NONE
@@ -99,6 +100,7 @@ case class LogDeleteRecordsResult(requestedOffset: Long, lowWatermark: Long, exc
  * @param lastStableOffset Current LSO or None if the result has an exception
  * @param preferredReadReplica the preferred read replica to be used for future fetches
  * @param exception Exception if error encountered while reading from the log
+ * 表示副本管理器从副本本地日志中读取到的消息数据以及相关元数据信息，如高水位值、Log Start Offset值等
  */
 case class LogReadResult(info: FetchDataInfo,
                          divergingEpoch: Option[FetchResponseData.EpochEndOffset],
@@ -154,7 +156,7 @@ case class LogReadResult(info: FetchDataInfo,
  * or follower of a partition.
  */
 sealed trait HostedPartition
-
+// 表示Broker本地保存的分区对象的状态。可能的状态包括：不存在状态（None）、在线状态（Online）和离线状态（Offline）
 object HostedPartition {
   /**
    * This broker does not have any state for this partition locally.
@@ -179,15 +181,15 @@ object ReplicaManager {
 
 // ReplicaManager负责管理和操作集群中Broker上的副本，还承担一部分分区管理工作
 // ReplicaManager类(C):副本管理器的实现代码类，定义各类数据结构和方法以管理集群副本对象
-class ReplicaManager(val config: KafkaConfig,
-                     metrics: Metrics,
-                     time: Time,
-                     scheduler: Scheduler,
-                     val logManager: LogManager,
-                     val remoteLogManager: Option[RemoteLogManager] = None,
-                     quotaManagers: QuotaManagers,
-                     val metadataCache: MetadataCache,
-                     logDirFailureChannel: LogDirFailureChannel,
+class ReplicaManager(val config: KafkaConfig, // kafka配置管理类
+                     metrics: Metrics, // 监控指标类
+                     time: Time, // 定时器类
+                     scheduler: Scheduler, // Kafka调度器
+                     val logManager: LogManager, // 日志管理类
+                     val remoteLogManager: Option[RemoteLogManager] = None, // 该模块主要进行远端存储的管理
+                     quotaManagers: QuotaManagers, // 配额管理器
+                     val metadataCache: MetadataCache, // Broker元数据缓存
+                     logDirFailureChannel: LogDirFailureChannel, // 失效日志路径的处理器类（例如设置多路径之后，某路径因磁盘满了不可用）
                      val alterPartitionManager: AlterPartitionManager,
                      val brokerTopicStats: BrokerTopicStats = new BrokerTopicStats(),
                      val isShuttingDown: AtomicBoolean = new AtomicBoolean(false),

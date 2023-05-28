@@ -25,6 +25,7 @@ import org.apache.kafka.common.record.Records;
 import java.util.List;
 import java.util.Optional;
 
+// 获取到的分区数据以及重要元数据信息，如高水位值、Log Start Offset值等
 public class FetchPartitionData {
     public final Errors error;
     public final long highWatermark;

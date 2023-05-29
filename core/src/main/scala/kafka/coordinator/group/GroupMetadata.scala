@@ -33,6 +33,14 @@ import org.apache.kafka.common.utils.Time
 import scala.collection.{Seq, immutable, mutable}
 import scala.jdk.CollectionConverters._
 
+/**用于定义消费者组状态，其共有五种状态
+*  Empty：无成员但注册信息尚未过期；
+*  PreparingRebalance：等待执行Rebalance操作；
+*  CompletingRebalance：等待Leader成员发送分区分配方案；
+*  Stable：正常工作时的状态；
+*  Dead：无成员且注册数据等待被删除
+*  消费者组从创建到正常工作，需要经历的状态转换Empty -> PreparingRebalance -> CompletingRebalance -> Stable
+ */
 private[group] sealed trait GroupState {
   val validPreviousStates: Set[GroupState]
 }
@@ -49,8 +57,10 @@ private[group] sealed trait GroupState {
  * transition: some members have joined by the timeout => CompletingRebalance
  *             all members have left the group => Empty
  *             group is removed by partition emigration => Dead
+ *
  */
 private[group] case object PreparingRebalance extends GroupState {
+  // 合法前置状态
   val validPreviousStates: Set[GroupState] = Set(Stable, CompletingRebalance, Empty)
 }
 
@@ -118,12 +128,13 @@ private[group] case object Dead extends GroupState {
   *             join group from a new member => PreparingRebalance
   *             group is removed by partition emigration => Dead
   *             group is removed by expiration => Dead
+ *
   */
 private[group] case object Empty extends GroupState {
   val validPreviousStates: Set[GroupState] = Set(PreparingRebalance)
 }
 
-
+// 提供GroupMetadata实例创建方法
 private object GroupMetadata extends Logging {
 
   def loadGroup(groupId: String,
@@ -154,24 +165,27 @@ private object GroupMetadata extends Logging {
 
 /**
  * Case class used to represent group metadata for the ListGroups API
+ * 定义消费者组概览信息
  */
-case class GroupOverview(groupId: String,
-                         protocolType: String,
-                         state: String)
+case class GroupOverview(groupId: String, // 组ID信息，即group.id参数值
+                         protocolType: String, // 消费者组的协议类型
+                         state: String) // 消费者组的状态
 
 /**
  * Case class used to represent group metadata for the DescribeGroup API
+ * 定义消费者组概要信息
  */
-case class GroupSummary(state: String,
-                        protocolType: String,
-                        protocol: String,
-                        members: List[MemberSummary])
+case class GroupSummary(state: String, // 消费者组的状态
+                        protocolType: String, // 协议类型
+                        protocol: String, // 消费者组选定的分区分配策略
+                        members: List[MemberSummary]) // 成员元数据
 
 /**
   * We cache offset commits along with their commit record offset. This enables us to ensure that the latest offset
   * commit is always materialized when we have a mix of transactional and regular offset commits. Without preserving
   * information of the commit record offset, compaction of the offsets topic itself may result in the wrong offset commit
   * being materialized.
+ * 保存位移提交信息的位移值和其他元数据
   */
 case class CommitRecordMetadataAndOffset(appendedBatchOffset: Option[Long], offsetAndMetadata: OffsetAndMetadata) {
   def olderThan(that: CommitRecordMetadataAndOffset): Boolean = appendedBatchOffset.get < that.appendedBatchOffset.get
@@ -189,26 +203,34 @@ case class CommitRecordMetadataAndOffset(appendedBatchOffset: Option[Long], offs
  *  1. group state
  *  2. generation id
  *  3. leader id
+ *  定义消费者组元数据信息及组件管理功能
  */
 @nonthreadsafe
-private[group] class GroupMetadata(val groupId: String, initialState: GroupState, time: Time) extends Logging {
+private[group] class GroupMetadata(val groupId: String, // 组ID
+                                   initialState: GroupState, // 消费者组初始状态
+                                   time: Time) extends Logging {
   type JoinCallback = JoinGroupResult => Unit
 
   private[group] val lock = new ReentrantLock
 
   private var state: GroupState = initialState
+  // 记录状态最近一次变更的时间戳
   var currentStateTimestamp: Option[Long] = Some(time.milliseconds())
   var protocolType: Option[String] = None
   var protocolName: Option[String] = None
-  var generationId = 0
+  var generationId = 0 // 消费组Generation号。Generation等同于消费者组执行过Rebalance操作的次数，每次执行Rebalance时，Generation数都要加1。
+  // 记录消费者组的Leader成员，可能不存在
   private var leaderId: Option[String] = None
-
+  // 成员元数据列表信息
   private val members = new mutable.HashMap[String, MemberMetadata]
   // Static membership mapping [key: group.instance.id, value: member.id]
+  // 静态成员ID列表
   private val staticMembers = new mutable.HashMap[String, String]
   private val pendingMembers = new mutable.HashSet[String]
   private var numMembersAwaitingJoin = 0
+  // 分区分配策略支持票数
   private val supportedProtocols = new mutable.HashMap[String, Integer]().withDefaultValue(0)
+  // 保存消费者订阅分区所提交的位移值
   private val offsets = new mutable.HashMap[TopicPartition, CommitRecordMetadataAndOffset]
   private val pendingOffsetCommits = new mutable.HashMap[TopicPartition, OffsetAndMetadata]
   private val pendingTransactionalOffsetCommits = new mutable.HashMap[Long, mutable.Map[TopicPartition, CommitRecordMetadataAndOffset]]()
@@ -218,6 +240,7 @@ private[group] class GroupMetadata(val groupId: String, initialState: GroupState
 
   // When protocolType == `consumer`, a set of subscribed topics is maintained. The set is
   // computed when a new generation is created or when the group is restored from the log.
+  // 消费者订阅的主题列表
   private var subscribedTopics: Option[Set[String]] = None
 
   var newMemberAdded: Boolean = false

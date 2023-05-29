@@ -21,13 +21,16 @@ import java.util
 
 import kafka.utils.nonthreadsafe
 
-case class MemberSummary(memberId: String,
-                         groupInstanceId: Option[String],
-                         clientId: String,
-                         clientHost: String,
-                         metadata: Array[Byte],
-                         assignment: Array[Byte])
+// 组成员概要数据，提取了最核心的元数据信息。bin/kafka-consumer-groups.sh --describe就是返回的该数据
+// 相当于一个POJO类，仅仅承载数据，没有定义任何逻辑
+case class MemberSummary(memberId: String, // 成员ID，由Kafka自动生成，规则是consumer-组ID-<序号>
+                         groupInstanceId: Option[String], // Consumer端参数group.instance.id值，消费者组静态成员的ID
+                         clientId: String, // client.id参数值，由于memberId不能被设置，因此，你可以用这个字段来区分消费者组下的不同成员。
+                         clientHost: String, // consumer端程序主机名，它记录了这个客户端是从哪台机器发出的消费请求。
+                         metadata: Array[Byte], // 消费者组成员使用的分配策略，由消费者端参数partition.assignment.strategy值设定
+                         assignment: Array[Byte]) // 成员订阅分区
 
+// 仅仅定义了一个方法，供上层组件调用，从一组给定的分区分配策略详情中提取出分区分配策略的名称，并将其封装成一个集合对象，然后返回
 private object MemberMetadata {
   def plainProtocolSet(supportedProtocols: List[(String, Array[Byte])]) = supportedProtocols.map(_._1).toSet
 }
@@ -52,20 +55,21 @@ private object MemberMetadata {
  *                            is kept in metadata until the leader provides the group assignment
  *                            and the group transitions to stable
  */
+// 消费者组成员的元数据，Kafka为消费者组成员定义了很多数据。
 @nonthreadsafe
 private[group] class MemberMetadata(var memberId: String,
                                     val groupInstanceId: Option[String],
                                     val clientId: String,
                                     val clientHost: String,
-                                    var rebalanceTimeoutMs: Int,
-                                    var sessionTimeoutMs: Int,
-                                    val protocolType: String,
-                                    var supportedProtocols: List[(String, Array[Byte])],
-                                    var assignment: Array[Byte] = Array.empty[Byte]) {
+                                    var rebalanceTimeoutMs: Int, // Rebalance操作超时时间
+                                    var sessionTimeoutMs: Int, // 会话超时时间
+                                    val protocolType: String, // 对消费者组而言，是"consumer"
+                                    var supportedProtocols: List[(String, Array[Byte])], // 成员配置的多套分区分配策略
+                                    var assignment: Array[Byte] = Array.empty[Byte] // 分区分配方案) {
 
-  var awaitingJoinCallback: JoinGroupResult => Unit = _
-  var awaitingSyncCallback: SyncGroupResult => Unit = _
-  var isNew: Boolean = false
+  var awaitingJoinCallback: JoinGroupResult => Unit = _ // 表示组成员是否正在等待加入组
+  var awaitingSyncCallback: SyncGroupResult => Unit = _ // 表示组成员是否正在等待GroupCoordinator发送分配方案
+  var isNew: Boolean = false // 表示是否是消费者组下的新成员
 
   def isStaticMember: Boolean = groupInstanceId.isDefined
 
@@ -81,6 +85,7 @@ private[group] class MemberMetadata(var memberId: String,
 
   /**
    * Get metadata corresponding to the provided protocol.
+   * 从该成员配置的分区分配方案列表中寻找给定策略的详情。如果找到，就直接返回详情字节数组数据，否则，就抛出异常
    */
   def metadata(protocol: String): Array[Byte] = {
     supportedProtocols.find(_._1 == protocol) match {
@@ -90,9 +95,10 @@ private[group] class MemberMetadata(var memberId: String,
     }
   }
 
+  // 检查心跳
   def hasSatisfiedHeartbeat: Boolean = {
     if (isNew) {
-      // New members can be expired while awaiting join, so we have to check this first
+      // 新成员在等待时可能会过期，所以先进行一次检查
       heartbeatSatisfied
     } else if (isAwaitingJoin || isAwaitingSync) {
       // Members that are awaiting a rebalance automatically satisfy expected heartbeats
@@ -105,6 +111,7 @@ private[group] class MemberMetadata(var memberId: String,
 
   /**
    * Check if the provided protocol metadata matches the currently stored metadata.
+   * 检查提供的协议元数据是否与当前存储的元数据匹配。
    */
   def matches(protocols: List[(String, Array[Byte])]): Boolean = {
     if (protocols.size != this.supportedProtocols.size)

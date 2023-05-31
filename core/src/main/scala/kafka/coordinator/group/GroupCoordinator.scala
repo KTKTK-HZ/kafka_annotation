@@ -508,28 +508,40 @@ private[group] class GroupCoordinator(
     }
   }
 
-  def handleSyncGroup(groupId: String,
-                      generation: Int,
-                      memberId: String,
-                      protocolType: Option[String],
-                      protocolName: Option[String],
-                      groupInstanceId: Option[String],
-                      groupAssignment: Map[String, Array[Byte]],
-                      responseCallback: SyncCallback,
+  // 该方法主要进行一系列的检查
+  def handleSyncGroup(groupId: String, // 消费者组名
+                      generation: Int, // 消费者组generation号，类似于分期的概念，每当有新的Reblance开启时，该值就会加1
+                      memberId: String, // 消费者组成员ID
+                      protocolType: Option[String], // 协议类型，该字段有两种可能consumer，connect
+                      protocolName: Option[String], // 分区消费分配策略名称，protocolType和protocolName为none表示消费者在上一步没有成功入组
+                      groupInstanceId: Option[String], // 静态成员InstanceID
+                      groupAssignment: Map[String, Array[Byte]], // 按照成员分组的分配方案，只有Leader成员发送的SyncGroupRequest请求，才包含这个方案
+                      responseCallback: SyncCallback, // 回调函数
                       requestLocal: RequestLocal = RequestLocal.NoCaching): Unit = {
+    /**验证消费者状态及合法性，包括1、消费者组名不能为空，2、Coordinator组件处于运行状态，
+     * 3、Coordinator组件当前没有执行加载过程，4、SyncGroupRequest请求发送给正确的Coordinator。
+     * 当Coordinator变更到其他Broker上时，需要从内部位移主题中读取消息数据，并填充到内存上的消费者组元数据缓存，这就是所谓的加载。
+     * 如果Coordinator变更了，那么，发送给老Coordinator所在Broker的请求就失效了，因为它没有通过第4个检查项，即发送给正确的Coordinator；
+     * 如果发送给了正确的Coordinator，但此时Coordinator正在执行加载过程，那么，它就没有通过第3个检查项，因为Coordinator尚不能对外提供服务，
+     * 要等加载完成之后才可以。
+     */
     validateGroupStatus(groupId, ApiKeys.SYNC_GROUP) match {
+      // 如果未通过合法性检查，且错误原因是Coordinator正在加载，则封装REBALANCE_IN_PROGRESS异常，并调用回调函数返回
       case Some(error) if error == Errors.COORDINATOR_LOAD_IN_PROGRESS =>
         // The coordinator is loading, which means we've lost the state of the active rebalance and the
         // group will need to start over at JoinGroup. By returning rebalance in progress, the consumer
         // will attempt to rejoin without needing to rediscover the coordinator. Note that we cannot
         // return COORDINATOR_LOAD_IN_PROGRESS since older clients do not expect the error.
         responseCallback(SyncGroupResult(Errors.REBALANCE_IN_PROGRESS))
-
+      // 如果是其他错误，则封装对应错误，并调用回调函数返回
       case Some(error) => responseCallback(SyncGroupResult(error))
 
       case None =>
+        // 获取消费者组元数据
         groupManager.getGroup(groupId) match {
+          // 如果未找到，则封装UNKNOWN_MEMBER_ID异常，并调用回调函数返回
           case None => responseCallback(SyncGroupResult(Errors.UNKNOWN_MEMBER_ID))
+          // 如果找到的话，则调用doSyncGroup方法执行组同步任务
           case Some(group) => doSyncGroup(group, generation, memberId, protocolType, protocolName,
             groupInstanceId, groupAssignment, requestLocal, responseCallback)
         }
@@ -580,6 +592,7 @@ private[group] class GroupCoordinator(
                           requestLocal: RequestLocal,
                           responseCallback: SyncCallback): Unit = {
     group.inLock {
+      // 对消费者组进行各种校验，如果没有通过校验，就封装对应的异常给回调函数
       val validationErrorOpt = validateSyncGroup(
         group,
         generationId,

@@ -58,6 +58,11 @@ public class PartitionStates<S> {
             map.put(topicPartition, state);
     }
 
+    /*
+    *PartitionStates类用轮询的方式来处理要读取的多个分区。
+    * 简单来说，就是依靠LinkedHashMap数据结构来保存所有主题分区。LinkedHashMap中的元素有明确的迭代顺序，通常就是元素被插入的顺序.
+    * 该方法就是把A从map中移除掉，然后再插回去，这样A自然就处于列表的最后一位了。
+    **/
     public void updateAndMoveToEnd(TopicPartition topicPartition, S state) {
         map.remove(topicPartition);
         map.put(topicPartition, state);

@@ -743,16 +743,21 @@ private[kafka] abstract class Acceptor(val socketServer: SocketServer,
    * Listen for new connections and assign accepted connections to processors using round-robin.
    */
   private def acceptNewConnections(): Unit = {
+    // 读取底层通道上准备就绪I/O操作的数量
     val ready = nioSelector.select(500)
+    // 如果存在准备就绪的I/O事件
     if (ready > 0) {
+      // 获取对应的SelectionKey集合
       val keys = nioSelector.selectedKeys()
       val iter = keys.iterator()
+      // 遍历这些SelectionKey
       while (iter.hasNext && shouldRun.get()) {
         try {
           val key = iter.next
           iter.remove()
-
+          // 测试SelectionKey的底层通道是否能够接收新Socket连接
           if (key.isAcceptable) {
+            // 接收此连接并分配对应Processor
             accept(key).foreach { socketChannel =>
               // Assign the channel to the next processor (using round-robin) to which the
               // channel can be added without blocking. If newConnections queue is full on
@@ -768,6 +773,8 @@ private[kafka] abstract class Acceptor(val socketServer: SocketServer,
                   processors(currentProcessorIndex)
                 }
                 currentProcessorIndex += 1
+                // 将新Socket连接加入的Processer线程处理连接队列
+                // 等待Processor线程后续处理
               } while (!assignNewConnection(socketChannel, processor, retriesLeft == 0))
             }
           } else

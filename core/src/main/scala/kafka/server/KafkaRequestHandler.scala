@@ -37,6 +37,7 @@ trait ApiRequestHandler {
 
 /**
  * A thread that answers kafka requests.
+ * Kafka I/O线程，用于执行请求处理逻辑，每个请求处理线程实例，负责从SocketServer的RequestChannel的请求队列中获取请求对象，并进行处理。
  */
 class KafkaRequestHandler(id: Int,
                           brokerId: Int,
@@ -104,6 +105,7 @@ class KafkaRequestHandler(id: Int,
 
 }
 
+// I/O线程池，请求处理线程池，负责创建、维护、管理和销毁下辖的请求处理线程
 class KafkaRequestHandlerPool(val brokerId: Int,
                               val requestChannel: RequestChannel,
                               val apis: ApiRequestHandler,
@@ -153,6 +155,7 @@ class KafkaRequestHandlerPool(val brokerId: Int,
   }
 }
 
+// 定义Broker端主题相关监控指标管理类
 class BrokerTopicMetrics(name: Option[String]) {
   private val metricsGroup = new KafkaMetricsGroup(this.getClass)
 
@@ -271,6 +274,7 @@ class BrokerTopicMetrics(name: Option[String]) {
   def close(): Unit = metricTypeMap.values.foreach(_.close())
 }
 
+// 封装主题相关监控指标
 object BrokerTopicStats {
   val MessagesInPerSec = "MessagesInPerSec"
   val BytesInPerSec = "BytesInPerSec"
@@ -296,6 +300,7 @@ object BrokerTopicStats {
   private val valueFactory = (k: String) => new BrokerTopicMetrics(Some(k))
 }
 
+// 定义Broker端主题相关监控指标的管理操作
 class BrokerTopicStats extends Logging {
   import BrokerTopicStats._
 

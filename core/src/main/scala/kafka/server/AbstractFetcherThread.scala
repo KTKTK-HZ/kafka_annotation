@@ -54,8 +54,8 @@ import scala.math._
  */
 abstract class AbstractFetcherThread(name: String, // 线程名称
                                      clientId: String, // ClientId，用于日志输出
-                                     val leader: LeaderEndPoint, // Leader分区所在broker的各项信息
-                                     failedPartitions: FailedPartitions, // 处理过程中出现失败的分区
+                                     val leader: LeaderEndPoint, // Leader分区所在broker的各项信息,该线程从这些broker上拉取数据
+                                     failedPartitions: FailedPartitions, // 处理过程中出现失败的分区集合
                                      val fetchTierStateMachine: TierStateMachine,
                                      fetchBackOffMs: Int = 0, // 重试间隔时间，即replica.fetch.backoff.ms
                                      isInterruptible: Boolean = true, // 线程是否允许中断
@@ -64,6 +64,8 @@ abstract class AbstractFetcherThread(name: String, // 线程名称
 
   this.logIdent = this.logPrefix
   // 定义FetchData类型表示获取到的消息数据
+  // PartitionData类是一个POJO类，保存的是Response中单个分区数据拉取的各项数据，
+  // 包括从该分区的Leader副本拉取回来的消息、该分区的高水位值和日志起始位移值
   type FetchData = FetchResponseData.PartitionData
   // 定义EpochData类型表示Leader Epoch数据
   type EpochData = OffsetForLeaderEpochRequestData.OffsetForLeaderPartition
@@ -984,7 +986,7 @@ case class PartitionFetchState(topicId: Option[Uuid],
                                delay: Option[DelayedItem],
                                state: ReplicaState,
                                lastFetchedEpoch: Option[Int]) {
-  // 可获取，表明副本获取线程当前能够读取数据，分区可获取的条件是副本处于Fetching且未被推迟执行
+  // 可获取，表明副本获取线程当前能够读取数据，分区可获取的条件是副本处于Fetching且分区未被推迟执行
   def isReadyForFetch: Boolean = state == Fetching && !isDelayed
   // 副本处于ISR的条件：没有lag，该状态主要用于副本限流
   def isReplicaInSync: Boolean = lag.isDefined && lag.get <= 0

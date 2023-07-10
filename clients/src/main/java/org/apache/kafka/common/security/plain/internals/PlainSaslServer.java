@@ -111,6 +111,7 @@ public class PlainSaslServer implements SaslServer {
         this.authorizationId = username;
 
         complete = true;
+        // 如果对比通过，则创建一个空字节报文返回给客户端
         return new byte[0];
     }
 

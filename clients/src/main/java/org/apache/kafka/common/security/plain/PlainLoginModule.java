@@ -30,11 +30,16 @@ public class PlainLoginModule implements LoginModule {
     private static final String PASSWORD_CONFIG = "password";
 
     static {
+        /**
+         * 初始化PlainServerProvider，PLAIN模式没有ClientProvider，
+         * 因为不需要进行客户端信息加密的工作，直接传明文
+         */
         PlainSaslServerProvider.initialize();
     }
 
     @Override
     public void initialize(Subject subject, CallbackHandler callbackHandler, Map<String, ?> sharedState, Map<String, ?> options) {
+        // 从options里获取用户密码，option是从JAAS配置文件中读取的信息
         String username = (String) options.get(USERNAME_CONFIG);
         if (username != null)
             subject.getPublicCredentials().add(username);

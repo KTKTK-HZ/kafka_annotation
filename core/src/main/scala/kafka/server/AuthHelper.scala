@@ -44,8 +44,10 @@ class AuthHelper(authorizer: Option[Authorizer]) {
                 logIfDenied: Boolean = true,
                 refCount: Int = 1): Boolean = {
     authorizer.forall { authZ =>
+      // 获取待鉴权的资源类型，常见的资源类型如TOPIC、GROUP、CLUSTER等
       val resource = new ResourcePattern(resourceType, resourceName, PatternType.LITERAL)
       val actions = Collections.singletonList(new Action(operation, resource, refCount, logIfAllowed, logIfDenied))
+      // 返回鉴权结果，是ALLOWED还是DENIED
       authZ.authorize(requestContext, actions).get(0) == AuthorizationResult.ALLOWED
     }
   }

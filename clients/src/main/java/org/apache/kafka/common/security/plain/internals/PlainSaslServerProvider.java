@@ -22,7 +22,9 @@ import java.security.Security;
 import org.apache.kafka.common.security.plain.internals.PlainSaslServer.PlainSaslServerFactory;
 
 public class PlainSaslServerProvider extends Provider {
-
+    /**
+     * 把安全机制及工厂类传入Security对象，供后续如果有需要就通过反射机制由该工厂类生成对应的PlainServer。
+     * */
     private static final long serialVersionUID = 1L;
 
     @SuppressWarnings("deprecation")

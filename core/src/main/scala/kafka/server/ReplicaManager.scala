@@ -156,7 +156,7 @@ case class LogReadResult(info: FetchDataInfo,
  * or follower of a partition.
  */
 sealed trait HostedPartition
-// 表示Broker本地保存的分区对象的状态。可能的状态包括：不存在状态（None）、在线状态（Online）和离线状态（Offline）
+// HostedPartition表示Broker本地保存的分区对象的状态。可能的状态包括：不存在状态（None）、在线状态（Online）和离线状态（Offline）
 object HostedPartition {
   /**
    * This broker does not have any state for this partition locally.

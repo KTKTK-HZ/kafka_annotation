@@ -88,25 +88,25 @@ import scala.util.{Failure, Success, Try}
 /**
  * Logic to handle the various Kafka requests
  */
-class KafkaApis(val requestChannel: RequestChannel,
-                val metadataSupport: MetadataSupport,
-                val replicaManager: ReplicaManager,
-                val groupCoordinator: GroupCoordinator,
-                val txnCoordinator: TransactionCoordinator,
-                val autoTopicCreationManager: AutoTopicCreationManager,
-                val brokerId: Int,
-                val config: KafkaConfig,
-                val configRepository: ConfigRepository,
-                val metadataCache: MetadataCache,
-                val metrics: Metrics,
-                val authorizer: Option[Authorizer],
-                val quotas: QuotaManagers,
-                val fetchManager: FetchManager,
-                brokerTopicStats: BrokerTopicStats,
-                val clusterId: String,
-                time: Time,
-                val tokenManager: DelegationTokenManager,
-                val apiVersionManager: ApiVersionManager
+class KafkaApis(val requestChannel: RequestChannel, // 请求通道
+                val metadataSupport: MetadataSupport, // 元数据支持
+                val replicaManager: ReplicaManager,  // 副本管理器
+                val groupCoordinator: GroupCoordinator, // 消费者组协调器组件
+                val txnCoordinator: TransactionCoordinator, // 事务管理器组件
+                val autoTopicCreationManager: AutoTopicCreationManager, // 主题自动创建管理器
+                val brokerId: Int, // broker.id参数值
+                val config: KafkaConfig, // Kafka配置
+                val configRepository: ConfigRepository, // 存储所有的配置
+                val metadataCache: MetadataCache, // 元数据缓存类
+                val metrics: Metrics, // 监控类
+                val authorizer: Option[Authorizer], // 鉴权类
+                val quotas: QuotaManagers, // 配额管理器，负责客户端、副本等的配额管理
+                val fetchManager: FetchManager, // Fetch管理器
+                brokerTopicStats: BrokerTopicStats, // 监控指标
+                val clusterId: String, //  clusterID
+                time: Time, // 时间
+                val tokenManager: DelegationTokenManager, // token管理器
+                val apiVersionManager: ApiVersionManager // Api版本管理器
 ) extends ApiRequestHandler with Logging {
 
   type FetchResponseStats = Map[TopicPartition, RecordConversionStats]
@@ -175,6 +175,13 @@ class KafkaApis(val requestChannel: RequestChannel,
         // before handing them to the request handler, so this path should not be exercised in practice
         throw new IllegalStateException(s"API ${request.header.apiKey} with version ${request.header.apiVersion} is not enabled")
       }
+      /**
+       * 根据请求头部信息中的apikey字段判断属于哪类请求，然后调用相应的handle方法
+       * 如果要新增RPC协议类型，则：
+       * 1、添加新的apiKey标识新的请求类型
+       * 2、添加新的case分支
+       * 3、添加相应的handle方法
+       * */
 
       request.header.apiKey match {
         case ApiKeys.PRODUCE => handleProduceRequest(request, requestLocal)
@@ -243,7 +250,9 @@ class KafkaApis(val requestChannel: RequestChannel,
         case _ => throw new IllegalStateException(s"No handler for request api key ${request.header.apiKey}")
       }
     } catch {
+          // 如果是严重错误，则抛出异常
       case e: FatalExitError => throw e
+          // 如果只是普通异常，记录下错误日志
       case e: Throwable => handleError(e)
     } finally {
       // try to complete delayed action. In order to avoid conflicting locking, the actions to complete delayed requests
@@ -252,6 +261,7 @@ class KafkaApis(val requestChannel: RequestChannel,
       // Delayed fetches are also completed by ReplicaFetcherThread.
       replicaManager.tryCompleteActions()
       // The local completion time may be set while processing the request. Only record it if it's unset.
+      // 记录一下请求本地完成时间，即Broker处理完该请求的时间
       if (request.apiLocalCompleteTimeNanos < 0)
         request.apiLocalCompleteTimeNanos = time.nanoseconds
     }

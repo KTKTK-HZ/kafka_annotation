@@ -323,7 +323,7 @@ class BrokerTopicStats extends Logging {
   }
 
   def updateReassignmentBytesIn(value: Long): Unit = {
-    allTopicsStats.reassignmentchan.foreach { metric =>
+    allTopicsStats.reassignmentBytesInPerSec.foreach { metric =>
       metric.mark(value)
     }
   }

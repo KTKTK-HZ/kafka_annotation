@@ -65,7 +65,7 @@ private[group] class MemberMetadata(var memberId: String,
                                     var sessionTimeoutMs: Int, // 会话超时时间
                                     val protocolType: String, // 对消费者组而言，是"consumer"
                                     var supportedProtocols: List[(String, Array[Byte])], // 成员配置的多套分区分配策略
-                                    var assignment: Array[Byte] = Array.empty[Byte] // 分区分配方案) {
+                                    var assignment: Array[Byte] = Array.empty[Byte] /**分区分配方案*/) {
 
   var awaitingJoinCallback: JoinGroupResult => Unit = _ // 表示组成员是否正在等待加入组
   var awaitingSyncCallback: SyncGroupResult => Unit = _ // 表示组成员是否正在等待GroupCoordinator发送分配方案

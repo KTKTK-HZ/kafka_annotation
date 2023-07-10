@@ -191,7 +191,7 @@ object ReassignPartitionsCommand extends Logging {
   }
 
   def main(args: Array[String]): Unit = {
-    val opts = validateAndParseArgs(args)
+    val opts = validateAndParseArgs(args) // 参数解析和校验
     var failed = true
     var adminClient: Admin = null
 
@@ -201,9 +201,9 @@ object ReassignPartitionsCommand extends Logging {
       else
         new util.Properties()
       props.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, opts.options.valueOf(opts.bootstrapServerOpt))
-      props.putIfAbsent(AdminClientConfig.CLIENT_ID_CONFIG, "reassign-partitions-tool")
-      adminClient = Admin.create(props)
-      handleAction(adminClient, opts)
+      props.putIfAbsent(AdminClientConfig.CLIENT_ID_CONFIG, "reassign-partitions-tool") // 如果clientId参数缺失，使用默认参数代替
+      adminClient = Admin.create(props) // 生成客户端
+      handleAction(adminClient, opts) // 所有操作的执行入口，接收client和各参数项
       failed = false
     } catch {
       case e: TerseReassignmentFailureException =>
@@ -214,15 +214,17 @@ object ReassignPartitionsCommand extends Logging {
     } finally {
       // It's good to do this after printing any error stack trace.
       if (adminClient != null) {
-        adminClient.close()
+        adminClient.close() // 使用完adminClinet需要关闭连接
       }
     }
-    // If the command failed, exit with a non-zero exit code.
+    // 如果命令运行失败，返回一个非0的值
     if (failed) {
       Exit.exit(1)
     }
   }
 
+  // 对所有支持的操作进行判断，支持的操作包括verifyAssignment，generateAssignment
+  // executeAssignment, cancelAssignment, listReassignments
   private def handleAction(adminClient: Admin,
                            opts: ReassignPartitionsCommandOptions): Unit = {
     if (opts.options.has(opts.verifyOpt)) {

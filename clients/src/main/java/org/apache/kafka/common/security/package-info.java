@@ -17,4 +17,5 @@
 /**
  * Provides mechanisms for securing a Kafka cluster and authenticating Kafka clients.
  */
+// 包级的文档注释
 package org.apache.kafka.common.security;

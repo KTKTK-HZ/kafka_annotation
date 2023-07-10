@@ -139,7 +139,7 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
    * an entry to the index if needed.
    *
    * It is assumed this method is being called from within a lock.
-   *
+   * 该方法在一个锁内被调用
    * @param largestOffset The last offset in the message set
    * @param largestTimestamp The largest timestamp in the message set.
    * @param shallowOffsetOfMaxTimestamp The offset of the message that has the largest timestamp in the messages to append.
@@ -276,7 +276,7 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
    * @param startingFilePosition A lower bound on the file position from which to begin the search. This is purely an optimization and
    * when omitted, the search will begin at the position in the offset index.
    * @return The position in the log storing the message with the least offset >= the requested offset and the size of the
-    *        message or null if no message meets this criteria.
+   *         message or null if no message meets this criteria.
    */
   @threadsafe
   private[log] def translateOffset(offset: Long, startingFilePosition: Int = 0): LogOffsetPosition = {
@@ -433,14 +433,12 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
   /**
    * Truncate off all index and log entries with offsets >= the given offset.
    * If the given offset is larger than the largest message in this segment, do nothing.
-   *
    * @param offset The offset to truncate to
    * @return The number of log bytes truncated
    */
   @nonthreadsafe
   def truncateTo(offset: Long): Int = {
-    // Do offset translation before truncating the index to avoid needless scanning
-    // in case we truncate the full index
+    // 在截断索引之前做offset转换，以避免在我们截断完整索引的情况下进行不必要的扫描
     val mapping = translateOffset(offset)
     offsetIndex.truncateTo(offset)
     timeIndex.truncateTo(offset)

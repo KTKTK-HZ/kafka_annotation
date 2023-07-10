@@ -40,7 +40,7 @@ public class RequestContext implements AuthorizableRequestContext {
     public final KafkaPrincipal principal; // Kafka用户认证类，用于认证授权
     public final ListenerName listenerName; // 监听器名称
     public final SecurityProtocol securityProtocol; // 安全协议，目前支持PLAINTEXT、SSL、SASL_PLAINTEXT、SASL_SSL
-    public final ClientInformation clientInformation; // 用户自定义的一些连接放信息
+    public final ClientInformation clientInformation; // 用户自定义的一些连接方信息
     public final boolean fromPrivilegedListener;
     public final Optional<KafkaPrincipalSerde> principalSerde;
 

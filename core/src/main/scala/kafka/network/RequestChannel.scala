@@ -79,6 +79,9 @@ object RequestChannel extends Logging {
     }
   }
 
+  /**
+   * 真正定义各类Clients端或Broker端请求的实现类。它定义的属性包括processor、context、startTimeNanos、memoryPool、buffer和metrics。
+   * */
   class Request(val processor: Int, // Processor线程的序号，即该请求由哪个Processor线程处理
                 val context: RequestContext, // 用来表示请求上下文信息
                 val startTimeNanos: Long, // 记录了Request对象被创建的时间，主要用于各种时间统计指标的计算。
@@ -364,14 +367,16 @@ class RequestChannel(val queueSize: Int,
   })
 
   def addProcessor(processor: Processor): Unit = {
+    // 添加Processor到Processor线程池
     if (processors.putIfAbsent(processor.id, processor) != null)
       warn(s"Unexpected processor with processorId ${processor.id}")
-
+    // 为给定Processor对象创建对应的监控指标
     metricsGroup.newGauge(responseQueueSizeMetricName, () => processor.responseQueueSize,
       Map(ProcessorMetricTag -> processor.id.toString).asJava)
   }
 
   def removeProcessor(processorId: Int): Unit = {
+    //移除编号为processorId的processor对象
     processors.remove(processorId)
     metricsGroup.removeMetric(responseQueueSizeMetricName, Map(ProcessorMetricTag -> processorId.toString).asJava)
   }

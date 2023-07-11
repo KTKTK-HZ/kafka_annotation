@@ -582,9 +582,9 @@ object ReassignPartitionsCommand extends Logging {
                          enableRackAwareness: Boolean)
                          : (Map[TopicPartition, Seq[Int]], Map[TopicPartition, Seq[Int]]) = {
     val (brokersToReassign, topicsToReassign) =
-      parseGenerateAssignmentArgs(reassignmentJson, brokerListString)
-    val currentAssignments = getReplicaAssignmentForTopics(adminClient, topicsToReassign)
-    val brokerMetadatas = getBrokerMetadata(adminClient, brokersToReassign, enableRackAwareness)
+      parseGenerateAssignmentArgs(reassignmentJson, brokerListString) // 解析并解析参数，获得要处理的broker与topic
+    val currentAssignments = getReplicaAssignmentForTopics(adminClient, topicsToReassign) // 获取现在的分区分布
+    val brokerMetadatas = getBrokerMetadata(adminClient, brokersToReassign, enableRackAwareness) // 获取各个broker的元数据
     val proposedAssignments = calculateAssignment(currentAssignments, brokerMetadatas)
     println("Current partition replica assignment\n%s\n".
       format(formatAsReassignmentJson(currentAssignments, Map.empty)))
@@ -609,7 +609,7 @@ object ReassignPartitionsCommand extends Logging {
     groupedByTopic.forKeyValue { (topic, assignment) =>
       val (_, replicas) = assignment.head
       val assignedReplicas = AdminUtils.
-        assignReplicasToBrokers(brokerMetadatas, assignment.size, replicas.size)
+        assignReplicasToBrokers(brokerMetadatas, assignment.size, replicas.size) // 自动分配分区
       proposedAssignments ++= assignedReplicas.map { case (partition, replicas) =>
         new TopicPartition(topic, partition) -> replicas
       }
@@ -632,7 +632,7 @@ object ReassignPartitionsCommand extends Logging {
 
   /**
    * Get the current replica assignments for some topics.
-   *
+   * 获取 topic的信息和其分区分布
    * @param adminClient     The AdminClient to use.
    * @param topics          The topics to get information about.
    * @return                A map from partitions to broker assignments.
@@ -686,8 +686,8 @@ object ReassignPartitionsCommand extends Logging {
                         brokers: Seq[Int],
                         enableRackAwareness: Boolean): Seq[BrokerMetadata] = {
     val brokerSet = brokers.toSet
-    val results = adminClient.describeCluster().nodes.get().asScala.
-      filter(node => brokerSet.contains(node.id)).
+    val results = adminClient.describeCluster().nodes.get().asScala. // 获取集群中所有的broker
+      filter(node => brokerSet.contains(node.id)). // 筛选出需要调整的broker
       map {
         node => if (enableRackAwareness && node.rack != null) {
           BrokerMetadata(node.id, Some(node.rack))
@@ -708,6 +708,7 @@ object ReassignPartitionsCommand extends Logging {
    * Parse and validate data gathered from the command-line for --generate
    * In particular, we parse the JSON and validate that duplicate brokers and
    * topics don't appear.
+   * 解析并校验generate操作的参数，并且保证不会出现重复的broker和topic
    *
    * @param reassignmentJson       The JSON passed to --generate .
    * @param brokerList             A list of brokers passed to --generate.
@@ -716,13 +717,13 @@ object ReassignPartitionsCommand extends Logging {
    */
   def parseGenerateAssignmentArgs(reassignmentJson: String,
                                   brokerList: String): (Seq[Int], Seq[String]) = {
-    val brokerListToReassign = brokerList.split(',').map(_.toInt)
-    val duplicateReassignments = CoreUtils.duplicates(brokerListToReassign)
-    if (duplicateReassignments.nonEmpty)
+    val brokerListToReassign = brokerList.split(',').map(_.toInt) // 获取各broker的地址，并将其转换为Int类型
+    val duplicateReassignments = CoreUtils.duplicates(brokerListToReassign) // 检查是否有重复的broker
+    if (duplicateReassignments.nonEmpty) // 如果broker重复，抛出异常
       throw new AdminCommandFailedException("Broker list contains duplicate entries: %s".
         format(duplicateReassignments.mkString(",")))
-    val topicsToReassign = parseTopicsData(reassignmentJson)
-    val duplicateTopicsToReassign = CoreUtils.duplicates(topicsToReassign)
+    val topicsToReassign = parseTopicsData(reassignmentJson) // 解析出有哪些topic
+    val duplicateTopicsToReassign = CoreUtils.duplicates(topicsToReassign) // 检查是否有重复的topic
     if (duplicateTopicsToReassign.nonEmpty)
       throw new AdminCommandFailedException("List of topics to reassign contains duplicate entries: %s".
         format(duplicateTopicsToReassign.mkString(",")))

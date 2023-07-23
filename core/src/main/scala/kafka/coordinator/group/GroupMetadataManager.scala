@@ -1107,16 +1107,17 @@ object GroupMetadataManager {
    * @param metadataVersion the api version
    * @return payload for offset commit message
    */
-  def groupMetadataValue(groupMetadata: GroupMetadata,
-                         assignment: Map[String, Array[Byte]],
-                         metadataVersion: MetadataVersion): Array[Byte] = {
-
+  def groupMetadataValue(groupMetadata: GroupMetadata, // 消费者组元数据对象
+                         assignment: Map[String, Array[Byte]], // 分区分配方案
+                         metadataVersion: MetadataVersion): Array[Byte] = { // 元数据版本号
+    // 确认消息格式版本
     val version =
       if (metadataVersion.isLessThan(IBP_0_10_1_IV0)) 0.toShort
       else if (metadataVersion.isLessThan(IBP_2_1_IV0)) 1.toShort
       else if (metadataVersion.isLessThan(IBP_2_3_IV0)) 2.toShort
       else 3.toShort
-
+    // 依次写入消费者组主要的元数据信息
+    // 包括协议类型、Generation ID、分区分配策略和Leader成员ID
     MessageUtil.toVersionPrefixedBytes(version, new GroupMetadataValue()
       .setProtocolType(groupMetadata.protocolType.getOrElse(""))
       .setGeneration(groupMetadata.generationId)
@@ -1343,7 +1344,7 @@ object GroupMetadataManager {
   }
 
 }
-
+// 该类是一个POJO类，用来封装<消费者组名，主题，分区号>的三元组
 case class GroupTopicPartition(group: String, topicPartition: TopicPartition) {
 
   def this(group: String, topic: String, partition: Int) =
@@ -1365,6 +1366,6 @@ case class OffsetKey(version: Short, key: GroupTopicPartition) extends BaseKey {
 
 case class GroupMetadataKey(version: Short, key: String) extends BaseKey {
 
-  override def toString: String = key
+  override def toString: String = key // 这个key是一个String类型，用来保存消费者组的名称
 }
 

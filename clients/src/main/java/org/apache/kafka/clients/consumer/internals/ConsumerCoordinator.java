@@ -482,9 +482,9 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
     }
 
     void maybeUpdateSubscriptionMetadata() {
-        int version = metadata.updateVersion();
+        int version = metadata.updateVersion(); // 获取当前元数据版本
         if (version > metadataSnapshot.version) {
-            Cluster cluster = metadata.fetch();
+            Cluster cluster = metadata.fetch(); // 获取元数据
 
             if (subscriptions.hasPatternSubscription())
                 updatePatternSubscription(cluster);

@@ -89,10 +89,10 @@ public class KafkaConsumerMetrics implements AutoCloseable {
     }
 
     public void recordPollStart(long pollStartMs) {
-        this.pollStartMs = pollStartMs;
-        this.timeSinceLastPollMs = lastPollMs != 0L ? pollStartMs - lastPollMs : 0;
-        this.timeBetweenPollSensor.record(timeSinceLastPollMs);
-        this.lastPollMs = pollStartMs;
+        this.pollStartMs = pollStartMs; // 记录拉取的时间
+        this.timeSinceLastPollMs = lastPollMs != 0L ? pollStartMs - lastPollMs : 0; // 现在距离上次拉取的时间差，如果这是第一次拉取则记录当前时间
+        this.timeBetweenPollSensor.record(timeSinceLastPollMs); // Sensor会使用连续的一组数值来计算相关统计值
+        this.lastPollMs = pollStartMs; // 更新最新一次拉取的时间
     }
 
     public void recordPollEnd(long pollEndMs) {

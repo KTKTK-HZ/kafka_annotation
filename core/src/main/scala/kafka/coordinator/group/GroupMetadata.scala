@@ -204,6 +204,7 @@ case class CommitRecordMetadataAndOffset(appendedBatchOffset: Option[Long], offs
  *  2. generation id
  *  3. leader id
  *  定义消费者组元数据信息及组件管理功能
+ *  由于一个消费者组下有多个成员，因此，一个GroupMetadata实例会对应于多个MemberMetadata实例
  */
 @nonthreadsafe
 private[group] class GroupMetadata(val groupId: String, // 组ID

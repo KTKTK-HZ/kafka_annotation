@@ -1235,7 +1235,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
         // 获取轻量级锁，并确定消费者没有关闭从而可以完成数据拉取
         acquireAndEnsureOpen();
         try {
-            // 记录开始拉取消息的时间
+            // 记录开始拉取消息的时间，并且更新相关的监控指标
             this.kafkaConsumerMetrics.recordPollStart(timer.currentTimeMs());
             // 如果该消费者没有订阅任何主题或者指定队列，则抛出异常，结束本次错误
             if (this.subscriptions.hasNoSubscriptionOrUserAssignment()) {
@@ -1243,7 +1243,14 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
             }
             // 使用do-while循环拉取数据，直到超时或者拉取到数据
             do {
-                // 判断唤醒消费者客户端是否有风险
+                /**
+                 * 消费端一般是使用while(true)无限循环拉取消息, 如果确定要退出循环，需要通过另一个线程调用consumer.wakeup()方法。
+                 * 如果循环运行 在主线程里，可以在 ShutdownHook里调用该方法。要记住，consumer.wakeup()是消费者唯一一个可以从其他线程里安全调用的方法。
+                 * 调用consumer.wakeup()可以退出 poll(),并抛出 WakeupException异常，或者如果调用 cconsumer.wakeup()时线程没有等待轮询，那么异常将在下一轮调用 poll()时抛出。
+                 * 我们不需要处理 WakeupException，因为它只是用于跳出循环的一种方式。不过， 在退出线程之前调用 consumer.close()是很有必要的，
+                 * 它会提交任何还没有提交的东西，并向群组协调器(broker)发送消息，告知自己要离开群组，接下来 就会触发再均衡 ，而不需要等待会话超时。
+                 * 该步骤是为了判断消费者线程是否可以被安全地中断
+                 * */
                 client.maybeTriggerWakeup();
 
                 if (includeMetadataInTimeout) {

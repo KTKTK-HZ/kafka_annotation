@@ -521,7 +521,13 @@ public class ConsumerNetworkClient implements Closeable {
         }
         return pollDelayMs;
     }
-
+    /**
+     * 该方法是为了安全的唤醒消费者客户端（从poll中退出），注意：并不是在这里唤醒，而是判断是否有唤醒的风险。
+     * 这里维护了两个原子标志：
+     * wakeupDisabled：线程在执行不可中断方法
+     * wakeup：线程中断请求
+     * 当wakeupDisabled 为 0 并且 wakeup 是 1，即线程没有在执行不可中断的方法，并收到了中断请求，则把 wakeup置为 0 并抛出异常，中断该线程。
+     * */
     public void maybeTriggerWakeup() {
         if (!wakeupDisabled.get() && wakeup.get()) {
             log.debug("Raising WakeupException in response to user wakeup");

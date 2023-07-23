@@ -48,7 +48,7 @@ import java.nio.MappedByteBuffer;
  * immutable one and truncate off any extra bytes. This is done when the index file is rolled over.
  *
  * No attempt is made to checksum the contents of this file, in the event of a crash it is rebuilt.
- *
+ * 定义时间戳索引，保存“<时间戳，位移值>”对
  */
 public class TimeIndex extends AbstractIndex {
     private static final Logger log = LoggerFactory.getLogger(TimeIndex.class);

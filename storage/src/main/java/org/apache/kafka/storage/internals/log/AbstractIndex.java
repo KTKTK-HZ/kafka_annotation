@@ -37,6 +37,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * The abstract index class which holds entry format agnostic methods.
+ * 关于索引最顶层的抽象类，该类封装了所有索引类型的公共操作
  */
 public abstract class AbstractIndex implements Closeable {
 
@@ -47,12 +48,12 @@ public abstract class AbstractIndex implements Closeable {
     private static final Logger log = LoggerFactory.getLogger(AbstractIndex.class);
 
     protected final ReentrantLock lock = new ReentrantLock();
+    // 以下四个属性file，baseOffset， maxIndexSize， writable为所有的索引定义
+    private final long baseOffset; // 索引对象对应日志段对象的起始位移值
+    private final int maxIndexSize; // 索引文件最大字节数，默认值为10M
+    private final boolean writable; // 索引文件的打开方式，true表示以"rw"的方式打开，false表示以"r"的方式打开
 
-    private final long baseOffset;
-    private final int maxIndexSize;
-    private final boolean writable;
-
-    private volatile File file;
+    private volatile File file; // 索引文件
 
     // Length of the index file
     private volatile long length;
@@ -73,20 +74,21 @@ public abstract class AbstractIndex implements Closeable {
      * @param maxIndexSize The maximum index size in bytes.
      */
     public AbstractIndex(File file, long baseOffset, int maxIndexSize, boolean writable) throws IOException {
-        Objects.requireNonNull(file);
+        Objects.requireNonNull(file); // 确保file不为空
         this.file = file;
         this.baseOffset = baseOffset;
         this.maxIndexSize = maxIndexSize;
         this.writable = writable;
 
-        createAndAssignMmap();
+        createAndAssignMmap(); // kafka底层索引是通过内存映射文件MappedByteBuffer来实现的
         this.maxEntries = mmap.limit() / entrySize();
         this.entries = mmap.position() / entrySize();
     }
 
     private void createAndAssignMmap() throws IOException {
-        boolean newlyCreated = file.createNewFile();
+        boolean newlyCreated = file.createNewFile(); // 创建索引文件
         RandomAccessFile raf;
+        // 以writable指定的方式（读写方式或只读方式）打开索引文件
         if (writable)
             raf = new RandomAccessFile(file, "rw");
         else
@@ -128,7 +130,7 @@ public abstract class AbstractIndex implements Closeable {
      */
     protected abstract void truncate();
 
-    protected abstract int entrySize();
+    protected abstract int entrySize(); // 定义了一个抽象方法来表示不同索引项的大小，对于OffsetIndex是8，TimeIndex为12
 
 
     /**

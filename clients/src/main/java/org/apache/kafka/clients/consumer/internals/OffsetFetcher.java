@@ -74,6 +74,7 @@ public class OffsetFetcher {
     private final long retryBackoffMs;
     private final long requestTimeoutMs;
     private final IsolationLevel isolationLevel;
+    // AtomicReference类提供了一个可以原子读写的对象引用变量
     private final AtomicReference<RuntimeException> cachedListOffsetsException = new AtomicReference<>();
     private final AtomicReference<RuntimeException> cachedOffsetForLeaderException = new AtomicReference<>();
     private final OffsetsForLeaderEpochClient offsetsForLeaderEpochClient;
@@ -118,9 +119,9 @@ public class OffsetFetcher {
 
     private Long offsetResetStrategyTimestamp(final TopicPartition partition) {
         OffsetResetStrategy strategy = subscriptions.resetStrategy(partition);
-        if (strategy == OffsetResetStrategy.EARLIEST)
+        if (strategy == OffsetResetStrategy.EARLIEST) // 如果是设置的方式为EARLIEST,则返回对应最开始的offset的时间戳
             return ListOffsetsRequest.EARLIEST_TIMESTAMP;
-        else if (strategy == OffsetResetStrategy.LATEST)
+        else if (strategy == OffsetResetStrategy.LATEST)// 如果是设置的方式为LATEST,则返回对应最开始的offset的时间戳
             return ListOffsetsRequest.LATEST_TIMESTAMP;
         else
             return null;
@@ -143,17 +144,18 @@ public class OffsetFetcher {
      */
     public void resetPositionsIfNeeded() {
         // Raise exception from previous offset fetch if there is one
+        // getAndSet将返回旧制并将值设为新值
         RuntimeException exception = cachedListOffsetsException.getAndSet(null);
-        if (exception != null)
+        if (exception != null) // 如果异常不为空，直接抛出异常
             throw exception;
-
+        // 获取需要reset的分区集合，如果该集合为空，则直接返回；如果该集合不为空则进行接下来的处理
         Set<TopicPartition> partitions = subscriptions.partitionsNeedingReset(time.milliseconds());
         if (partitions.isEmpty())
             return;
 
         final Map<TopicPartition, Long> offsetResetTimestamps = new HashMap<>();
         for (final TopicPartition partition : partitions) {
-            Long timestamp = offsetResetStrategyTimestamp(partition);
+            Long timestamp = offsetResetStrategyTimestamp(partition); // 根据设置的策略获取对应offset的时间戳
             if (timestamp != null)
                 offsetResetTimestamps.put(partition, timestamp);
         }

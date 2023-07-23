@@ -1232,7 +1232,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
      * @param includeMetadataInTimeout 拉取消息的超时时间是否包含更新元数据的时间，默认为true
      */
     private ConsumerRecords<K, V> poll(final Timer timer, final boolean includeMetadataInTimeout) {
-        // 获取轻量级锁，并确定消费者没有关闭以确认是否可以拉取消息
+        // 获取轻量级锁，并确定消费者没有关闭从而可以完成数据拉取
         acquireAndEnsureOpen();
         try {
             // 记录开始拉取消息的时间
@@ -1293,7 +1293,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
     }
 
     boolean updateAssignmentMetadataIfNeeded(final Timer timer, final boolean waitForJoinGroup) {
-        if (coordinator != null && !coordinator.poll(timer, waitForJoinGroup)) {
+        if (coordinator != null && !coordinator.poll(timer, waitForJoinGroup)) { // 如果开启了周期性偏移提交，coordinator.poll会进行处理
             return false;
         }
 
@@ -2501,7 +2501,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
     /**
      * Set the fetch position to the committed position (if there is one)
      * or reset it using the offset reset policy the user has configured.
-     *
+     * 提交已经消费的位置或者使用用户设定的策略重置offset
      * @throws org.apache.kafka.common.errors.AuthenticationException if authentication fails. See the exception for more details
      * @throws NoOffsetForPartitionException If no offset is stored for a given partition and no offset reset policy is
      *             defined
@@ -2509,8 +2509,9 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
      */
     private boolean updateFetchPositions(final Timer timer) {
         // If any partitions have been truncated due to a leader change, we need to validate the offsets
+        // 如果有分区因leader变更而被截断，则需要对offset进行校验
         offsetFetcher.validatePositionsIfNeeded();
-
+        // 查看TopicPartitionState的position是否为空，第一次消费时肯定为空
         cachedSubscriptionHasAllFetchPositions = subscriptions.hasAllFetchPositions();
         if (cachedSubscriptionHasAllFetchPositions) return true;
 
@@ -2519,15 +2520,18 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
         // coordinator lookup if there are partitions which have missing positions, so
         // a consumer with manually assigned partitions can avoid a coordinator dependence
         // by always ensuring that assigned partitions have an initial position.
+        // 如果没有有效的offset，则需要从group coordinator中获取
         if (coordinator != null && !coordinator.refreshCommittedOffsetsIfNeeded(timer)) return false;
 
         // If there are partitions still needing a position and a reset policy is defined,
         // request reset using the default policy. If no reset strategy is defined and there
         // are partitions with a missing position, then we will raise an exception.
+        // 如果还存在partition不知道position，并且设置了offsetreset策略，那么就等待重置，不然就抛出异常
         subscriptions.resetInitializingPositions();
 
         // Finally send an asynchronous request to look up and update the positions of any
         // partitions which are awaiting reset.
+        // 向partitionLeader（groupCoordinator所在的机器）发送ListOffsetRequest重置position
         offsetFetcher.resetPositionsIfNeeded();
 
         return true;
@@ -2540,7 +2544,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
     private void acquireAndEnsureOpen() {
         acquire();
         if (this.closed) {
-            release();
+            release(); // 释放保护消费者免受多线程访问的轻量级锁
             throw new IllegalStateException("This consumer has already been closed.");
         }
     }
@@ -2549,20 +2553,22 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
      * Acquire the light lock protecting this consumer from multi-threaded access. Instead of blocking
      * when the lock is not available, however, we just throw an exception (since multi-threaded usage is not
      * supported).
+     * 获取轻量级锁，防止该消费者受多线程访问。但当锁不可获取时程序不会进行堵塞而是直接抛出异常，因为消费者不支持多线程
      * @throws ConcurrentModificationException if another thread already has the lock
      */
     private void acquire() {
         // 获取当前线程和其线程id
-        final Thread thread = Thread.currentThread();
-        final long threadId = thread.getId();
-        // 如果线程id与currentThread不同，并且currentThread的值不等于-1，则报异常
-        //否则则将threadId设置为currentThread
+        final Thread thread = Thread.currentThread(); // 返回当前线程对象的引用
+        final long threadId = thread.getId(); // 返回线程标识符。线程ID是在创建线程时生成的唯一正数值。
+        /**如果线程id与currentThread不同，并且currentThread的值不等于-1（初始值，表示当前没有线程在执行），则报异常
+         * 否则则将threadId设置为currentThread
+         */
         if (threadId != currentThread.get() && !currentThread.compareAndSet(NO_CURRENT_THREAD, threadId))
             throw new ConcurrentModificationException("KafkaConsumer is not safe for multi-threaded access. " +
                     "currentThread(name: " + thread.getName() + ", id: " + threadId + ")" +
                     " otherThread(id: " + currentThread.get() + ")"
             );
-        //refcount加1
+        //refcount加1,refcount 用于允许获得 currentThread 的线程进行可重入访问。
         refcount.incrementAndGet();
     }
 
@@ -2570,7 +2576,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
      * Release the light lock protecting the consumer from multi-threaded access.
      */
     private void release() {
-        if (refcount.decrementAndGet() == 0)
+        if (refcount.decrementAndGet() == 0) // 如果refcount减一之后等于0，则将currentThread重新设置为初始值-1，表示没有在执行的消费者
             currentThread.set(NO_CURRENT_THREAD);
     }
 

@@ -64,7 +64,8 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
                                val lazyTimeIndex: LazyIndex[TimeIndex], // 时间戳索引值
                                val txnIndex: TransactionIndex, // 已终止事务索引
                                val baseOffset: Long, // 日志段起始位移值
-                               val indexIntervalBytes: Int, // 日志段新增索引的频率，默认4k，log.index.interval.bytes
+                               // 日志段新增索引项的频率，默认4k，即日志段至少新写入 4KB 的消息数据才会新增一条索引项，log.index.interval.bytes
+                               val indexIntervalBytes: Int,
                                val rollJitterMs: Long, // 日志段对象新增倒计时的“扰动值”
                                val time: Time) extends Logging {
 
@@ -155,9 +156,9 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
     if (records.sizeInBytes > 0) {
       trace(s"Inserting ${records.sizeInBytes} bytes at end offset $largestOffset at position ${log.sizeInBytes} " +
             s"with largest timestamp $largestTimestamp at shallow offset $shallowOffsetOfMaxTimestamp")
-      // 获取该日志段的大小
+      // 获取该日志段原本的大小
       val physicalPosition = log.sizeInBytes()
-      // 如果该日志段为空，如果为空的话，kafka需要记录此次要写入消息集合的最大时间戳
+      // 如果该日志段为空的话，kafka需要记录此次要写入消息集合的最大时间戳
       // 并将其作为后面新增日志段倒计时的依据
       if (physicalPosition == 0)
         rollingBasedTimestamp = Some(largestTimestamp)
@@ -701,6 +702,7 @@ object LogSegment {
   }
 }
 
+// 该object主要负责为日志落盘进行计时
 object LogFlushStats {
   private val metricsGroup = new KafkaMetricsGroup(LogFlushStats.getClass)
   val logFlushTimer: Timer = metricsGroup.newTimer("LogFlushRateAndTimeMs", TimeUnit.MILLISECONDS, TimeUnit.SECONDS)

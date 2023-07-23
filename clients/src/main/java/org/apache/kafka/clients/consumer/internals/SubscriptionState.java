@@ -685,6 +685,7 @@ public class SubscriptionState {
         return collectPartitions(state -> state.fetchState.equals(FetchStates.INITIALIZING));
     }
 
+    // 输入过滤规则，返回符合规则的分区
     private Set<TopicPartition> collectPartitions(Predicate<TopicPartitionState> filter) {
         Set<TopicPartition> result = new HashSet<>();
         assignment.forEach((topicPartition, topicPartitionState) -> {
@@ -712,7 +713,7 @@ public class SubscriptionState {
     }
 
     public synchronized Set<TopicPartition> partitionsNeedingReset(long nowMs) {
-        return collectPartitions(state -> state.awaitingReset() && !state.awaitingRetryBackoff(nowMs));
+        return collectPartitions(state -> state.awaitingReset() && !state.awaitingRetryBackoff(nowMs)); // 输入的参数是过滤规则ß
     }
 
     public synchronized Set<TopicPartition> partitionsNeedingValidation(long nowMs) {
@@ -918,7 +919,7 @@ public class SubscriptionState {
         }
 
         private boolean awaitingRetryBackoff(long nowMs) {
-            return nextRetryTimeMs != null && nowMs < nextRetryTimeMs;
+            return nextRetryTimeMs != null && nowMs < nextRetryTimeMs; // 判断是否还有重试的机会
         }
 
         private boolean awaitingReset() {

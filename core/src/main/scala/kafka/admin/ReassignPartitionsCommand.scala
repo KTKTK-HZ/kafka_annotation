@@ -41,7 +41,7 @@ import scala.math.Ordered.orderingToOrdered
 object ReassignPartitionsCommand extends Logging {
   private[admin] val AnyLogDir = "any"
 
-  val helpText = "This tool helps to move topic partitions between replicas."
+  val helpText = "This tool helps to move topic partitions between replicas." // 重分区主要是在不同的副本间移动分区
 
   /**
    * The earliest version of the partition reassignment JSON.  We will default to this
@@ -61,14 +61,14 @@ object ReassignPartitionsCommand extends Logging {
   private[admin] val brokerLevelFollowerThrottle =
     DynamicConfig.Broker.FollowerReplicationThrottledRateProp
   private[admin] val brokerLevelLogDirThrottle =
-    DynamicConfig.Broker.ReplicaAlterLogDirsIoMaxBytesPerSecondProp
+    DynamicConfig.Broker.ReplicaAlterLogDirsIoMaxBytesPerSecondProp // 移动副本过程中每分钟最大的btye数
   private[admin] val brokerLevelThrottles = Seq(
     brokerLevelLeaderThrottle,
     brokerLevelFollowerThrottle,
     brokerLevelLogDirThrottle
   )
 
-  // Throttles that are set at the level of an individual topic.
+  // Throttles that are set at the level of an individual topic. topic级别的设定
   private[admin] val topicLevelLeaderThrottle =
     LogConfig.LEADER_REPLICATION_THROTTLED_REPLICAS_CONFIG
   private[admin] val topicLevelFollowerThrottle =

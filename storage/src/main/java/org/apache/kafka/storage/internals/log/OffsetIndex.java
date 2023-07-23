@@ -49,6 +49,8 @@ import java.util.Optional;
  *
  * All external APIs translate from relative offsets to full offsets, so users of this class do not interact with the internal
  * storage format.
+ *
+ * 定义位移索引，保存“<位移值，文件磁盘物理位置>”对
  */
 public class OffsetIndex extends AbstractIndex {
     private static final Logger log = LoggerFactory.getLogger(OffsetIndex.class);

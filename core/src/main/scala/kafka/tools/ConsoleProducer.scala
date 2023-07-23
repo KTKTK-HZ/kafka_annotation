@@ -93,7 +93,7 @@ object ConsoleProducer extends Logging {
   def main(args: Array[String]): Unit = {
 
     try {
-      val config = new ProducerConfig(args)
+      val config = new ProducerConfig(args) // 解析命令行参数为ProducerConfig
       val input = System.in
       val producer = new KafkaProducer[Array[Byte], Array[Byte]](producerProps(config))
       try loopReader(producer, newReader(config.readerClass, getReaderProps(config)), input, config.sync)
@@ -109,6 +109,9 @@ object ConsoleProducer extends Logging {
     }
   }
 
+  /**
+   * 支持同步发送和异步发送两种情况，同步方式使用future的get
+   * */
   private def send(producer: Producer[Array[Byte], Array[Byte]],
                          record: ProducerRecord[Array[Byte], Array[Byte]], sync: Boolean): Unit = {
     if (sync)
@@ -174,9 +177,9 @@ object ConsoleProducer extends Logging {
   }
 
   class ProducerConfig(args: Array[String]) extends CommandDefaultOptions(args) {
-    val topicOpt = parser.accepts("topic", "REQUIRED: The topic id to produce messages to.")
-      .withRequiredArg
-      .describedAs("topic")
+    val topicOpt = parser.accepts("topic", "REQUIRED: The topic id to produce messages to.") // 该描述用于产生帮助文档
+      .withRequiredArg // topic参数必须存在
+      .describedAs("topic") // 用于对选项添加描述，例如后面例子中的第二个topic--topic <String: topic>
       .ofType(classOf[String])
     val brokerListOpt = parser.accepts("broker-list", "DEPRECATED, use --bootstrap-server instead; ignored if --bootstrap-server is specified.  The broker list string in the form HOST1:PORT1,HOST2:PORT2.")
       .withRequiredArg
@@ -304,7 +307,7 @@ object ConsoleProducer extends Logging {
       .describedAs("config file")
       .ofType(classOf[String])
 
-    options = tryParse(parser, args)
+    options = tryParse(parser, args) // 对参数进行解析
 
     CommandLineUtils.maybePrintHelpOrVersion(this, "This tool helps to read data from standard input and publish it to Kafka.")
 

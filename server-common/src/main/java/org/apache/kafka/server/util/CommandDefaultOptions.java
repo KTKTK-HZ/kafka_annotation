@@ -21,8 +21,8 @@ import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 
 public abstract class CommandDefaultOptions {
-    public final String[] args;
-    public final OptionParser parser;
+    public final String[] args; // 将命令行传入的args存储起来
+    public final OptionParser parser; // 选项解析器
     public final AbstractOptionSpec<Void> helpOpt;
     public final AbstractOptionSpec<Void> versionOpt;
     public OptionSet options;
@@ -33,7 +33,8 @@ public abstract class CommandDefaultOptions {
 
     public CommandDefaultOptions(String[] args, boolean allowCommandOptionAbbreviation) {
         this.args = args;
-        this.parser = new OptionParser(allowCommandOptionAbbreviation);
+        this.parser = new OptionParser(allowCommandOptionAbbreviation); // 允许选项缩写
+        // forHelp()的作用是把forHelp属性设置为true
         this.helpOpt = parser.accepts("help", "Print usage information.").forHelp();
         this.versionOpt = parser.accepts("version", "Display Kafka version.").forHelp();
         this.options = null;

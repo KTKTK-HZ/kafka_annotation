@@ -32,7 +32,7 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.regex.Pattern
 import java.util.{Collections, Optional}
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
-import scala.collection.{Seq, immutable, mutable}
+import scala.collection.{Seq, immutable}
 import scala.jdk.CollectionConverters._
 
 /**

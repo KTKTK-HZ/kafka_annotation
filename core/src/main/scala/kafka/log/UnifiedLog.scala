@@ -1730,21 +1730,21 @@ class UnifiedLog(@volatile var logStartOffset: Long,
 }
 
 object UnifiedLog extends Logging {
-  val LogFileSuffix = LogFileUtils.LOG_FILE_SUFFIX
+  val LogFileSuffix = LogFileUtils.LOG_FILE_SUFFIX // 日志文件的后缀
 
-  val IndexFileSuffix = LogFileUtils.INDEX_FILE_SUFFIX
+  val IndexFileSuffix = LogFileUtils.INDEX_FILE_SUFFIX // 索引文件的后缀
 
-  val TimeIndexFileSuffix = LogFileUtils.TIME_INDEX_FILE_SUFFIX
+  val TimeIndexFileSuffix = LogFileUtils.TIME_INDEX_FILE_SUFFIX // 时间索引文件的后缀
 
-  val TxnIndexFileSuffix = LogFileUtils.TXN_INDEX_FILE_SUFFIX
+  val TxnIndexFileSuffix = LogFileUtils.TXN_INDEX_FILE_SUFFIX // 事务文件的后缀
 
-  val CleanedFileSuffix = LocalLog.CleanedFileSuffix
+  val CleanedFileSuffix = LocalLog.CleanedFileSuffix // 用于日志清理的临时文件的后缀
 
-  val SwapFileSuffix = LocalLog.SwapFileSuffix
+  val SwapFileSuffix = LocalLog.SwapFileSuffix // 将文件交换到日志中时使用的临时文件
 
-  val DeleteDirSuffix = LocalLog.DeleteDirSuffix
+  val DeleteDirSuffix = LocalLog.DeleteDirSuffix // 应用于文件夹的。当你删除一个主题的时候，主题的分区文件夹会被加上这个后缀。
 
-  val FutureDirSuffix = LocalLog.FutureDirSuffix
+  val FutureDirSuffix = LocalLog.FutureDirSuffix // 用于变更主题分区文件夹地址的目录
 
   private[log] val DeleteDirPattern = LocalLog.DeleteDirPattern
   private[log] val FutureDirPattern = LocalLog.FutureDirPattern
@@ -2103,6 +2103,7 @@ object UnifiedLog extends Logging {
 
 }
 
+// 定义了Log对象的监控指标
 object LogMetricNames {
   val NumLogSegments: String = "NumLogSegments"
   val LogStartOffset: String = "LogStartOffset"

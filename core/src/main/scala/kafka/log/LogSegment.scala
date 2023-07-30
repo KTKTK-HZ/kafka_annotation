@@ -130,6 +130,7 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
 
   /**
    * checks that the argument offset can be represented as an integer offset relative to the baseOffset.
+   * 检查参数偏移量是否可以表示为相对于 baseOffset 的整数偏移量。
    */
   def canConvertToRelativeOffset(offset: Long): Boolean = {
     offsetIndex.canAppendOffset(offset)
@@ -149,23 +150,24 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
    * @throws LogSegmentOffsetOverflowException if the largest offset causes index offset overflow
    */
   @nonthreadsafe
-  def append(largestOffset: Long, // 输入消息集合中最大的偏移量
+  def append(largestOffset: Long, // 输入消息集合中最大的偏移量,即lastoffset
              largestTimestamp: Long, // 输入消息集合的最大时间戳
              shallowOffsetOfMaxTimestamp: Long, // 输入消息集合中最大时间戳对应的偏移量
              records: MemoryRecords /*真正要写入的消息*/): Unit = {
     if (records.sizeInBytes > 0) {
       trace(s"Inserting ${records.sizeInBytes} bytes at end offset $largestOffset at position ${log.sizeInBytes} " +
             s"with largest timestamp $largestTimestamp at shallow offset $shallowOffsetOfMaxTimestamp")
-      // 获取该日志段原本的大小
+      // 获取该日志段原本的大小，作为物理位置
       val physicalPosition = log.sizeInBytes()
-      // 如果该日志段为空的话，kafka需要记录此次要写入消息集合的最大时间戳
-      // 并将其作为后面新增日志段倒计时的依据
+      /**如果该日志段为空的话，kafka需要记录此次要写入消息集合的最大时间戳
+       * 并将其作为后面新增日志段倒计时的依据
+       */
       if (physicalPosition == 0)
         rollingBasedTimestamp = Some(largestTimestamp)
-      // 确保新增的消息不要超出边界，即要求largestOffset - baseoffset < Int.MAXVALUE
+      // 确保新增的消息不要超出边界，即offset不能小于baseoffset，同时largestOffset - baseoffset < Int.MAXVALUE
       ensureOffsetInRange(largestOffset)
 
-      // 调用FileRecords的append方法执行真正的写入操作，其工作是将内存中的消息对象写入到操作系统的页缓存
+      // 调用FileRecords的append方法执行真正的写入操作，其工作是将内存中的消息对象写入到操作系统的页缓存，并返回添加进内存的消息大小
       val appendedBytes = log.append(records)
       trace(s"Appended $appendedBytes to ${log.file} at end offset $largestOffset")
       // 更新内存中最大时间戳和最大偏移量
@@ -181,7 +183,7 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
       bytesSinceLastIndexEntry += records.sizeInBytes
     }
   }
-
+  // 确保offset可以转换成相对位移，如果不能，则抛出LogSegmentOffsetOverflowException
   private def ensureOffsetInRange(offset: Long): Unit = {
     if (!canConvertToRelativeOffset(offset))
       throw new LogSegmentOffsetOverflowException(this, offset)
@@ -344,6 +346,7 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
    * @param leaderEpochCache Optionally a cache for updating the leader epoch during recovery.
    * @return The number of bytes truncated from the log
    * @throws LogSegmentOffsetOverflowException if the log segment contains an offset that causes the index offset to overflow
+   *
    * Broker 在启动时会从磁盘上加载所有日志段信息到内存中，并创建相应的 LogSegment 对象实例。
    */
   @nonthreadsafe
@@ -439,7 +442,7 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
    */
   @nonthreadsafe
   def truncateTo(offset: Long): Int = {
-    // 在截断索引之前做offset转换，以避免在我们截断完整索引的情况下进行不必要的扫描
+
     val mapping = translateOffset(offset)
     offsetIndex.truncateTo(offset)
     timeIndex.truncateTo(offset)

@@ -28,6 +28,7 @@ import java.util.OptionalInt;
 
 /**
  * Struct to hold various quantities we compute about each message set before appending to the log.
+ * 保存一组待写入消息的元数据，比如，这组消息中第一条消息的位移值是多少、最后一条消息的位移值是多少，这组消息中最大的消息时间戳又是多少等。
  */
 public class LogAppendInfo {
 
@@ -36,24 +37,24 @@ public class LogAppendInfo {
             RecordConversionStats.EMPTY, CompressionType.NONE, CompressionType.NONE, -1, -1,
             false, -1L);
 
-    private Optional<LogOffsetMetadata> firstOffset;
-    private long lastOffset;
-    private long maxTimestamp;
-    private long offsetOfMaxTimestamp;
-    private long logAppendTime;
-    private long logStartOffset;
-    private RecordConversionStats recordConversionStats;
+    private Optional<LogOffsetMetadata> firstOffset; // 消息集中的第一个偏移量，如果该量存在，其类型为LogOffsetMetadata
+    private long lastOffset; // 消息集中的最后一个偏移量
+    private long maxTimestamp; // 消息集中的最大时间戳
+    private long offsetOfMaxTimestamp; // 最大时间戳所对应消息的偏移量
+    private long logAppendTime; // 消息集添加到日志的时间，否则为Message.NoTimestamp
+    private long logStartOffset; // 添加消息集时log的起始偏移量
+    private RecordConversionStats recordConversionStats; // record处理期间收集的统计信息，如果“assignOffsets”为“false”，则为“null”
 
-    private final OptionalInt lastLeaderEpoch;
-    private final CompressionType sourceCompression;
-    private final CompressionType targetCompression;
-    private final int shallowCount;
-    private final int validBytes;
-    private final boolean offsetsMonotonic;
-    private final long lastOffsetOfFirstBatch;
-    private final List<RecordError> recordErrors;
-    private final String errorMessage;
-    private final LeaderHwChange leaderHwChange;
+    private final OptionalInt lastLeaderEpoch; // 与最后一个offset对应的lastLeaderEpoch
+    private final CompressionType sourceCompression; // 生产者生产时采用的压缩格式
+    private final CompressionType targetCompression; // 消息集的目标编解码器
+    private final int shallowCount; //shallow message的数量
+    private final int validBytes; // 有效字节数
+    private final boolean offsetsMonotonic; // 该消息集中的偏移量是否单调递增
+    private final long lastOffsetOfFirstBatch; // 第一批的最后一个偏移量
+    private final List<RecordError> recordErrors; // 导致相应批次被删除的记录错误列表
+    private final String errorMessage; // 错误信息
+    private final LeaderHwChange leaderHwChange; // 如果追加记录后需要增加高水印，则增量。如果不更改高水印，则相同。 None 是默认值，表示追加失败
 
     /**
      * Creates an instance with the given params.

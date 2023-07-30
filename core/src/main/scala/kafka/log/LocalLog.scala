@@ -37,6 +37,7 @@ import scala.jdk.CollectionConverters._
 
 /**
  * Holds the result of splitting a segment into one or more segments, see LocalLog.splitOverflowedSegment().
+ * 保存将一个segment拆分成多个segment的结果
  *
  * @param deletedSegments segments deleted when splitting a segment
  * @param newSegments new segments created when splitting a segment
@@ -47,7 +48,7 @@ case class SplitSegmentResult(deletedSegments: Iterable[LogSegment], newSegments
  * An append-only log for storing messages locally. The log is a sequence of LogSegments, each with a base offset.
  * New log segments are created according to a configurable policy that controls the size in bytes or time interval
  * for a given segment.
- *
+ * 在本地存储消息的append-only日志
  * NOTE: this class is not thread-safe, and it relies on the thread safety provided by the Log class.
  *
  * @param _dir The directory in which log segments are created.
@@ -60,12 +61,12 @@ case class SplitSegmentResult(deletedSegments: Iterable[LogSegment], newSegments
  * @param topicPartition The topic partition associated with this log
  * @param logDirFailureChannel The LogDirFailureChannel instance to asynchronously handle Log dir failure
  */
-class LocalLog(@volatile private var _dir: File,
-               @volatile private[log] var config: LogConfig,
-               private[log] val segments: LogSegments,
-               @volatile private[log] var recoveryPoint: Long,
+class LocalLog(@volatile private var _dir: File, // 日志所在的文件夹路径
+               @volatile private[log] var config: LogConfig, // log的配置
+               private[log] val segments: LogSegments, // logsegment
+               @volatile private[log] var recoveryPoint: Long, // 开始下一次recover的偏移量，即尚未刷新到磁盘的第一个偏移量
                @volatile private var nextOffsetMetadata: LogOffsetMetadata, // 可以附加下一条消息的偏移量，即LEO
-               private[log] val scheduler: Scheduler,
+               private[log] val scheduler: Scheduler, // 用于后台操作的线程池调度程序
                private[log] val time: Time,
                private[log] val topicPartition: TopicPartition,
                private[log] val logDirFailureChannel: LogDirFailureChannel) extends Logging {
@@ -592,19 +593,29 @@ class LocalLog(@volatile private var _dir: File,
  */
 object LocalLog extends Logging {
 
-  /** a file that is scheduled to be deleted */
+  /** a file that is scheduled to be deleted
+   * 是删除日志段操作创建的文件。目前删除日志段文件是异步操作，Broker端把日志段文件从.log后缀修改为.deleted后缀。
+   * */
   private[log] val DeletedFileSuffix = ".deleted"
 
-  /** A temporary file that is being used for log cleaning */
+  /** A temporary file that is being used for log cleaning
+   * 用于日志清理的临时文件的后缀
+   * */
   private[log] val CleanedFileSuffix = ".cleaned"
 
-  /** A temporary file used when swapping files into the log */
+  /** A temporary file used when swapping files into the log
+   * 将文件交换到日志中时使用的临时文件
+   * */
   private[log] val SwapFileSuffix = ".swap"
 
-  /** a directory that is scheduled to be deleted */
+  /** a directory that is scheduled to be deleted
+   * 应用于文件夹的。当你删除一个主题的时候，主题的分区文件夹会被加上这个后缀。
+   * */
   private[log] val DeleteDirSuffix = "-delete"
 
-  /** a directory that is used for future partition */
+  /** a directory that is used for future partition
+   * 用于变更主题分区文件夹地址的目录
+   * */
   private[log] val FutureDirSuffix = "-future"
 
   private[log] val DeleteDirPattern = Pattern.compile(s"^(\\S+)-(\\S+)\\.(\\S+)$DeleteDirSuffix")

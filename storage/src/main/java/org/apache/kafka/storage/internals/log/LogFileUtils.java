@@ -33,21 +33,25 @@ public final class LogFileUtils {
 
     /**
      * Suffix of a log file
+     * 日志文件的后缀
      */
     public static final String LOG_FILE_SUFFIX = ".log";
 
     /**
      * Suffix of an index file
+     * 索引文件后缀
      */
     public static final String INDEX_FILE_SUFFIX = ".index";
 
     /**
      * Suffix of a time index file
+     * 时间索引文件的后缀
      */
     public static final String TIME_INDEX_FILE_SUFFIX = ".timeindex";
 
     /**
      * Suffix of an aborted txn index
+     * 事务文件的后缀
      */
     public static final String TXN_INDEX_FILE_SUFFIX = ".txnindex";
 
@@ -80,7 +84,7 @@ public final class LogFileUtils {
     /**
      * Make log segment file name from offset bytes. All this does is pad out the offset number with zeros
      * so that ls sorts the files numerically.
-     *
+     * 从offset创建文件名
      * @param offset The offset to use in the file name
      * @return The filename
      */

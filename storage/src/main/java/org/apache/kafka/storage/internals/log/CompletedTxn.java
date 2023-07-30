@@ -19,6 +19,7 @@ package org.apache.kafka.storage.internals.log;
 /**
  * A class used to hold useful metadata about a completed transaction. This is used to build
  * the transaction index after appending to the log.
+ * 记录已完成事务的元数据，主要用于构建事务索引。
  */
 public class CompletedTxn {
     public final long producerId;

@@ -22,6 +22,7 @@ import java.util.Objects;
  * Container class which represents a snapshot of the significant offsets for a partition. This allows fetching
  * of these offsets atomically without the possibility of a leader change affecting their consistency relative
  * to each other. See {@link UnifiedLog#fetchOffsetSnapshot()}.
+ * 封装分区所有位移元数据的容器类。
  */
 public class LogOffsetSnapshot {
 

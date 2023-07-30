@@ -18,6 +18,7 @@ package org.apache.kafka.storage.internals.log;
 
 /**
  * A class used to hold params required to decide to rotate a log segment or not.
+ * 用于控制日志段是否切分（Roll）的数据结构。
  */
 public class RollParams {
 

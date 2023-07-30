@@ -713,7 +713,7 @@ public class SubscriptionState {
     }
 
     public synchronized Set<TopicPartition> partitionsNeedingReset(long nowMs) {
-        return collectPartitions(state -> state.awaitingReset() && !state.awaitingRetryBackoff(nowMs)); // 输入的参数是过滤规则ß
+        return collectPartitions(state -> state.awaitingReset() && !state.awaitingRetryBackoff(nowMs)); // 输入的参数是过滤规则
     }
 
     public synchronized Set<TopicPartition> partitionsNeedingValidation(long nowMs) {

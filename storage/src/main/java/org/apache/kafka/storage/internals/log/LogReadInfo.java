@@ -22,6 +22,7 @@ import java.util.Optional;
 
 /**
  * Structure used for lower level reads using {@link kafka.cluster.Partition#fetchRecords()}.
+ * 封装读取日志返回的数据及其元数据。
  */
 public class LogReadInfo {
 

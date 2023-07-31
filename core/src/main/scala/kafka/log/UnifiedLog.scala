@@ -243,7 +243,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
       initializeLeaderEpochCache()
     oldConfig
   }
-
+  // 获取高水位值
   def highWatermark: Long = highWatermarkMetadata.messageOffset
 
   /**

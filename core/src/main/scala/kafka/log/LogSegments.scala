@@ -34,7 +34,10 @@ import scala.jdk.CollectionConverters._
  */
 class LogSegments(topicPartition: TopicPartition) {
 
-  /* the segments of the log with key being LogSegment base offset and value being a LogSegment */
+  /* the segments of the log with key being LogSegment base offset and value being a LogSegment
+  * ConcurrentNavigableMap是线程安全的，这样Kafka源码不需要自行确保日志段操作过程中的线程安全；
+  * 它是键值（Key）可排序的Map。Kafka将每个日志段的起始位移值作为Key，这样一来，我们就能够很方便地根据所有日志段的起始位移值对它们进行排序和比较，同时还能快速地找到与给定位移值相近的前后两个日志段。
+  * */
   private val segments: ConcurrentNavigableMap[Long, LogSegment] = new ConcurrentSkipListMap[Long, LogSegment]
 
   /**

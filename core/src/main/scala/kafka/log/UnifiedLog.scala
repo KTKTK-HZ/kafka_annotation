@@ -260,12 +260,12 @@ class UnifiedLog(@volatile var logStartOffset: Long,
   /**
    * Update high watermark with offset metadata. The new high watermark will be lower
    * bounded by the log start offset and upper bounded by the log end offset.
-   *
+   * 使用偏移元数据更新高水位线。 新的高水位线的下限将由日志开始偏移量决定，上限将由日志结束偏移量决定。
    * @param highWatermarkMetadata the suggested high watermark with offset metadata
    * @return the updated high watermark offset
    */
   def updateHighWatermark(highWatermarkMetadata: LogOffsetMetadata): Long = {
-    val endOffsetMetadata = localLog.logEndOffsetMetadata
+    val endOffsetMetadata = localLog.logEndOffsetMetadata // 获取下一条消息偏移量的元数据
     val newHighWatermarkMetadata = if (highWatermarkMetadata.messageOffset < logStartOffset) {
       new LogOffsetMetadata(logStartOffset)
     } else if (highWatermarkMetadata.messageOffset >= endOffsetMetadata.messageOffset) {
@@ -288,15 +288,18 @@ class UnifiedLog(@volatile var logStartOffset: Long,
    * @return the old high watermark, if updated by the new value
    */
   def maybeIncrementHighWatermark(newHighWatermark: LogOffsetMetadata): Option[LogOffsetMetadata] = {
+    // 新高水位值不能越过Log End Offset
     if (newHighWatermark.messageOffset > logEndOffset)
       throw new IllegalArgumentException(s"High watermark $newHighWatermark update exceeds current " +
         s"log end offset ${localLog.logEndOffsetMetadata}")
 
     lock.synchronized {
-      val oldHighWatermark = fetchHighWatermarkMetadata
+      val oldHighWatermark = fetchHighWatermarkMetadata // 获取老的高水位值
 
       // Ensure that the high watermark increases monotonically. We also update the high watermark when the new
       // offset metadata is on a newer segment, which occurs whenever the log is rolled to a new segment.
+      // 新高水位值要比老高水位值大以维持单调增加特性，否则就不做更新！
+      // 另外，如果新高水位值在新日志段上，也可执行更新高水位操作
       if (oldHighWatermark.messageOffset < newHighWatermark.messageOffset ||
         (oldHighWatermark.messageOffset == newHighWatermark.messageOffset && oldHighWatermark.onOlderSegment(newHighWatermark))) {
         updateHighWatermarkMetadata(newHighWatermark)
@@ -333,13 +336,13 @@ class UnifiedLog(@volatile var logStartOffset: Long,
    * known, this will do a lookup in the index and cache the result.
    */
   private def fetchHighWatermarkMetadata: LogOffsetMetadata = {
-    localLog.checkIfMemoryMappedBufferClosed()
+    localLog.checkIfMemoryMappedBufferClosed() // 确保读取时日志不能被关闭
 
-    val offsetMetadata = highWatermarkMetadata
-    if (offsetMetadata.messageOffsetOnly) {
+    val offsetMetadata = highWatermarkMetadata // 保存当前高水位值到本地变量，避免多线程访问干扰
+    if (offsetMetadata.messageOffsetOnly) { // 没有获取到完整的高水位元数据
       lock.synchronized {
-        val fullOffset = convertToOffsetMetadataOrThrow(highWatermark)
-        updateHighWatermarkMetadata(fullOffset)
+        val fullOffset = convertToOffsetMetadataOrThrow(highWatermark) // 通过读日志文件的方式把完整的高水位元数据信息拉出来
+        updateHighWatermarkMetadata(fullOffset) // 然后再更新一下高水位对象
         fullOffset
       }
     } else {
@@ -347,16 +350,18 @@ class UnifiedLog(@volatile var logStartOffset: Long,
     }
   }
 
+  // 设置高水位
   private def updateHighWatermarkMetadata(newHighWatermark: LogOffsetMetadata): Unit = {
-    if (newHighWatermark.messageOffset < 0)
+    if (newHighWatermark.messageOffset < 0) // 高水位不能为负数
       throw new IllegalArgumentException("High watermark offset should be non-negative")
 
-    lock synchronized {
-      if (newHighWatermark.messageOffset < highWatermarkMetadata.messageOffset) {
+    lock synchronized { // 保护log对象修改的Monitor锁
+      if (newHighWatermark.messageOffset < highWatermarkMetadata.messageOffset) { // 新高水位不能低于以前的高水位
         warn(s"Non-monotonic update of high watermark from $highWatermarkMetadata to $newHighWatermark")
       }
 
-      highWatermarkMetadata = newHighWatermark
+      highWatermarkMetadata = newHighWatermark // 赋予新的高水位值
+      // 已下为Kafka的事务机制的操作
       producerStateManager.onHighWatermarkUpdated(newHighWatermark.messageOffset)
       logOffsetsListener.onHighWatermarkUpdated(newHighWatermark.messageOffset)
       maybeIncrementFirstUnstableOffset()

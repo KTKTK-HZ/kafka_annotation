@@ -186,6 +186,7 @@ class LocalLog(@volatile private var _dir: File, // 日志所在的文件夹路�
 
   /**
    * The offset metadata of the next message that will be appended to the log
+   * 将附加到log的下一条消息的偏移量元数据
    */
   private[log] def logEndOffsetMetadata: LogOffsetMetadata = nextOffsetMetadata
 

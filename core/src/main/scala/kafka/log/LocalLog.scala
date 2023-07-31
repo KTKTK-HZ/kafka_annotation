@@ -77,9 +77,11 @@ class LocalLog(@volatile private var _dir: File, // 日志所在的文件夹路�
 
   // The memory mapped buffer for index files of this log will be closed with either delete() or closeHandlers()
   // After memory mapped buffer is closed, no disk IO operation should be performed for this log.
+  // 判断内存映射缓冲区是否已经关闭，如果内存映射缓冲区关闭则不再对该log进行操作
   @volatile private[log] var isMemoryMappedBufferClosed = false
 
   // Cache value of parent directory to avoid allocations in hot paths like ReplicaManager.checkpointHighWatermarks
+  // 缓存父文件夹避免分配到热点路径
   @volatile private var _parentDir: String = dir.getParent
 
   // Last time the log was flushed

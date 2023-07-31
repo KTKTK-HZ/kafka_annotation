@@ -33,8 +33,17 @@ public final class LogOffsetMetadata {
 
     private static final int UNKNOWN_FILE_POSITION = -1;
 
-    public final long messageOffset;
-    public final long segmentBaseOffset;
+    public final long messageOffset; // 消息位移值
+    /**
+    *日志段起始位移值辅助计算两条消息在物理磁盘文件中位置的差值，即两条消息彼此隔了多少字节。
+    *这个计算有个前提条件，即两条消息必须处在同一个日志段对象上，不能跨日志段对象。
+    *否则它们就位于不同的物理文件上，计算这个值就没有意义了。这里的segmentBaseOffset，就是用来判断两条消息是否处于同一个日志段的。
+    */
+    public final long segmentBaseOffset; // 保存该位移值所在日志段的起始位置
+    /**
+    *保存该位移值所在日志段的物理磁盘位置。这个字段在计算两个位移值之间的物理磁盘位置差值时非常有用。
+    *答案就是在读取日志的时候需要计算位置之间的字节数。假设每次读取时只能读1MB的数据，那么，源码肯定需要关心两个位移之间所有消息的总字节数是否超过了1MB。
+    */
     public final int relativePositionInSegment;
 
     public LogOffsetMetadata(long messageOffset) {
@@ -58,6 +67,7 @@ public final class LogOffsetMetadata {
     }
 
     // check if this offset is on the same segment with the given offset
+    // 比较两个LogOffsetMetadata对象的segmentBaseOffset值是否相等，以判断其是否处于同一日志段
     private boolean onSameSegment(LogOffsetMetadata that) {
         return this.segmentBaseOffset == that.segmentBaseOffset;
     }

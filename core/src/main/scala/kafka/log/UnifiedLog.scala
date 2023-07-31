@@ -140,6 +140,8 @@ class UnifiedLog(@volatile var logStartOffset: Long,
    * not eligible for deletion. This means that the active segment is only eligible for deletion if the high watermark
    * equals the log end offset (which may never happen for a partition under consistent load). This is needed to
    * prevent the log start offset (which is exposed in fetch responses) from getting ahead of the high watermark.
+   * 高水位值是volatile的。因为多个线程可能同时读取它，因此需要设置为volatile，保证内存可见性。由于高水位值可能被多个线程同时修改
+   * 因此源码使用Java Monitor锁来确保并发修改时是线程安全的。其初始值为logStartOffset
    */
   @volatile private var highWatermarkMetadata: LogOffsetMetadata = new LogOffsetMetadata(logStartOffset)
 
@@ -241,7 +243,7 @@ class UnifiedLog(@volatile var logStartOffset: Long,
       initializeLeaderEpochCache()
     oldConfig
   }
-
+  // 获取高水位值
   def highWatermark: Long = highWatermarkMetadata.messageOffset
 
   /**

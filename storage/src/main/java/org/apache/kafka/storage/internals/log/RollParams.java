@@ -22,12 +22,12 @@ package org.apache.kafka.storage.internals.log;
  */
 public class RollParams {
 
-    public final long maxSegmentMs;
-    public final int maxSegmentBytes;
-    public final long maxTimestampInMessages;
-    public final long maxOffsetInMessages;
-    public final int messagesSize;
-    public final long now;
+    public final long maxSegmentMs; // 日志段保留的最大时间，默认168小时，由参数log.roll.hours设置
+    public final int maxSegmentBytes; // 日志段最大byte数
+    public final long maxTimestampInMessages; // 待写入消息中的最大时间戳
+    public final long maxOffsetInMessages; // 待写入消息的最大位移值
+    public final int messagesSize; // 当前消息段的大小
+    public final long now; // 当前时间
 
     public RollParams(long maxSegmentMs,
                int maxSegmentBytes,

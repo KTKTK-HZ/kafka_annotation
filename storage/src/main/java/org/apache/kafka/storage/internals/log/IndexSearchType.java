@@ -17,5 +17,5 @@
 package org.apache.kafka.storage.internals.log;
 
 public enum IndexSearchType {
-    KEY, VALUE
+    KEY, VALUE // index搜索的类型
 }

@@ -90,7 +90,7 @@ public class RequestContext implements AuthorizableRequestContext {
             ApiVersionsRequest apiVersionsRequest = new ApiVersionsRequest(new ApiVersionsRequestData(), (short) 0, header.apiVersion());
             return new RequestAndSize(apiVersionsRequest, 0);
         } else {
-            // 从请求头部数据中获取ApiKeys信息
+            // 从请求头部数据中获取ApiKeys信息，kafka通过该信息执行不同类型的请求
             ApiKeys apiKey = header.apiKey();
             try {
                 // 从请求头部数据中获取版本信息

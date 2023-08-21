@@ -42,7 +42,7 @@ import java.util.concurrent.locks.ReentrantLock;
 public abstract class AbstractIndex implements Closeable {
 
     private enum SearchResultType {
-        LARGEST_LOWER_BOUND, SMALLEST_UPPER_BOUND
+        LARGEST_LOWER_BOUND, SMALLEST_UPPER_BOUND // 最大下线，最小上线
     }
 
     private static final Logger log = LoggerFactory.getLogger(AbstractIndex.class);
@@ -62,9 +62,12 @@ public abstract class AbstractIndex implements Closeable {
 
     /**
      * The maximum number of entries this index can hold
+     * 该索引可容纳的最大条数
      */
     private volatile int maxEntries;
-    /** The number of entries in this index */
+    /** The number of entries in this index
+     *  该索引的条目数
+     * */
     private volatile int entries;
 
 
@@ -97,7 +100,7 @@ public abstract class AbstractIndex implements Closeable {
         try {
             /* pre-allocate the file if necessary */
             if (newlyCreated) {
-                if (maxIndexSize < entrySize())
+                if (maxIndexSize < entrySize()) // 如果索引文件最大字节数小于单一索引值的大小，则抛出异常
                     throw new IllegalArgumentException("Invalid max index size: " + maxIndexSize);
                 raf.setLength(roundDownToExactMultiple(maxIndexSize, entrySize()));
             }
@@ -296,6 +299,7 @@ public abstract class AbstractIndex implements Closeable {
 
     /**
      * Remove all the entries from the index and resize the index to the max index size.
+     * 删除索引中的所有条目，并将索引大小调整为最大索引大小。
      */
     public void reset() throws IOException {
         truncate();
@@ -455,6 +459,7 @@ public abstract class AbstractIndex implements Closeable {
 
     /**
      * Round a number to the greatest exact multiple of the given factor less than the given number.
+     * 将一个数字舍入为小于给定系数的最大整数倍。
      * E.g. roundDownToExactMultiple(67, 8) == 64
      */
     private static int roundDownToExactMultiple(int number, int factor) {

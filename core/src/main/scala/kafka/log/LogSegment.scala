@@ -69,10 +69,11 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
                                val rollJitterMs: Long, // 日志段对象新增倒计时的“扰动值”
                                val time: Time) extends Logging {
 
-  def offsetIndex: OffsetIndex = lazyOffsetIndex.get
+  def offsetIndex: OffsetIndex = lazyOffsetIndex.get // 加载offset索引项
 
-  def timeIndex: TimeIndex = lazyTimeIndex.get
+  def timeIndex: TimeIndex = lazyTimeIndex.get // 加载timeIndex索引项
 
+  // 判断日志段是否已经达到了切分的标准
   def shouldRoll(rollParams: RollParams): Boolean = {
     val reachedRollMs = timeWaitedForRoll(rollParams.now, rollParams.maxTimestampInMessages) > rollParams.maxSegmentMs - rollJitterMs
     size > rollParams.maxSegmentBytes - rollParams.messagesSize ||
@@ -271,7 +272,7 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
 
   /**
    * Find the physical file position for the first message with offset >= the requested offset.
-   *
+   * 查找偏移量 >= 请求偏移量的消息在文件中的物理位置
    * The startingFilePosition argument is an optimization that can be used if we already know a valid starting position
    * in the file higher than the greatest-lower-bound from the index.
    *
@@ -283,7 +284,7 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
    */
   @threadsafe
   private[log] def translateOffset(offset: Long, startingFilePosition: Int = 0): LogOffsetPosition = {
-    val mapping = offsetIndex.lookup(offset)
+    val mapping = offsetIndex.lookup(offset) // 获取给定offset对应的OffsetPosition，其是保存offset和其对应物理位置的POJO
     log.searchForOffsetWithSize(offset, max(mapping.position, startingFilePosition))
   }
 
@@ -351,7 +352,7 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
    */
   @nonthreadsafe
   def recover(producerStateManager: ProducerStateManager, leaderEpochCache: Option[LeaderEpochFileCache] = None): Int = {
-    // 清空相关索引
+    // 删除索引中的所有条目，并将索引大小调整为最大索引大小
     offsetIndex.reset()
     timeIndex.reset()
     txnIndex.reset()
@@ -443,15 +444,16 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
   @nonthreadsafe
   def truncateTo(offset: Long): Int = {
 
-    val mapping = translateOffset(offset)
-    offsetIndex.truncateTo(offset)
-    timeIndex.truncateTo(offset)
-    txnIndex.truncateTo(offset)
+    val mapping = translateOffset(offset) // 获取LogOffsetPosition，存储<offset,position,size>
+    offsetIndex.truncateTo(offset) // 截断offsetIndex文件
+    timeIndex.truncateTo(offset) // 截断timeIndex文件
+    txnIndex.truncateTo(offset) // 截断txnIndex文件
 
     // After truncation, reset and allocate more space for the (new currently active) index
+    // 截断旧分段时，新日志分段开始活动，我们希望将索引大小重置为最大索引大小，以避免滚动新分段
     offsetIndex.resize(offsetIndex.maxIndexSize)
     timeIndex.resize(timeIndex.maxIndexSize)
-
+    // 对log文件进行阶段操作
     val bytesTruncated = if (mapping == null) 0 else log.truncateTo(mapping.position)
     if (log.sizeInBytes == 0) {
       created = time.milliseconds
@@ -541,7 +543,7 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
     if (rollingBasedTimestamp.isEmpty) {
       val iter = log.batches.iterator()
       if (iter.hasNext)
-        rollingBasedTimestamp = Some(iter.next().maxTimestamp)
+        rollingBasedTimestamp = Some(iter.next().maxTimestamp) // 获取第一批的最大时间戳
     }
   }
 

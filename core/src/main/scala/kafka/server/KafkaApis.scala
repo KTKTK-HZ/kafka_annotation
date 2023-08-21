@@ -99,7 +99,7 @@ class KafkaApis(val requestChannel: RequestChannel, // 请求通道
                 val configRepository: ConfigRepository, // 存储所有的配置
                 val metadataCache: MetadataCache, // 元数据缓存类
                 val metrics: Metrics, // 监控类
-                val authorizer: Option[Authorizer], // 鉴权类
+                val authorizer: Option[Authorizer], // 认证鉴权类
                 val quotas: QuotaManagers, // 配额管理器，负责客户端、副本等的配额管理
                 val fetchManager: FetchManager, // Fetch管理器
                 brokerTopicStats: BrokerTopicStats, // 监控指标

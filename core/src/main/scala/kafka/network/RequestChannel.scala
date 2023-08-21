@@ -82,12 +82,12 @@ object RequestChannel extends Logging {
   /**
    * 真正定义各类Clients端或Broker端请求的实现类。它定义的属性包括processor、context、startTimeNanos、memoryPool、buffer和metrics。
    * */
-  class Request(val processor: Int, // Processor线程的序号，即该请求由哪个Processor线程处理
+  class Request(val processor: Int, // Processor线程的序号，即该请求由哪个Processor线程处理，当请求处理完后还由该线程将响应返回
                 val context: RequestContext, // 用来表示请求上下文信息
                 val startTimeNanos: Long, // 记录了Request对象被创建的时间，主要用于各种时间统计指标的计算。
-                val memoryPool: MemoryPool, // 一个非阻塞式的内存缓冲区，主要作用是避免Request对象无限使用内存
+                val memoryPool: MemoryPool, // 一个非阻塞式的内存缓冲区，主要作用是避免Request对象无限使用内存，接口类为MemoryPool，实现类为SimpleMemoryPool
                 @volatile var buffer: ByteBuffer, // buffer是真正保存Request对象内容的字节缓冲区
-                metrics: RequestChannel.Metrics,
+                metrics: RequestChannel.Metrics, // Request相关的各种监控指标的一个管理类
                 val envelope: Option[RequestChannel.Request] = None) extends BaseRequest {
     // These need to be volatile because the readers are in the network thread and the writers are in the request
     // handler threads or the purgatory threads
@@ -381,7 +381,11 @@ class RequestChannel(val queueSize: Int,
     metricsGroup.removeMetric(responseQueueSizeMetricName, Map(ProcessorMetricTag -> processorId.toString).asJava)
   }
 
-  /** Send a request to be handled, potentially blocking until there is room in the queue for the request */
+  /** Send a request to be handled, potentially blocking until there is room in the queue for the request
+   * 发送要处理的请求，可能会阻塞，直到队列中有空间容纳该请求
+   * 所谓的发送Request，仅仅是将Request对象放置在Request队列中而已，而接收Request则是从队列中取出Request。
+   * 整个流程构成了一个迷你版的“生产者-消费者”模式，然后依靠ArrayBlockingQueue的线程安全性来确保整个过程的线程安全
+   * */
   def sendRequest(request: RequestChannel.Request): Unit = {
     requestQueue.put(request)
   }
@@ -424,7 +428,7 @@ class RequestChannel(val queueSize: Int,
 
   /** Send a response back to the socket server to be sent over the network */
   private[network] def sendResponse(response: RequestChannel.Response): Unit = {
-    if (isTraceEnabled) {
+    if (isTraceEnabled) {  // 构造Trace日志输出字符串
       val requestHeader = response.request.headerForLoggingOrThrottling()
       val message = response match {
         case sendResponse: SendResponse =>
@@ -452,10 +456,11 @@ class RequestChannel(val queueSize: Int,
       // For a given request, these may happen in addition to one in the previous section, skip updating the metrics
       case _: StartThrottlingResponse | _: EndThrottlingResponse => ()
     }
-
+    // 找出response对应的Processor线程，即request当初是由哪个Processor线程处理的
     val processor = processors.get(response.processor)
     // The processor may be null if it was shutdown. In this case, the connections
     // are closed, so the response is dropped.
+    // 将response对象放置到对应Processor线程的Response队列中
     if (processor != null) {
       processor.enqueueResponse(response)
     }

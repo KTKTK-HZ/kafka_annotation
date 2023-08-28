@@ -89,19 +89,19 @@ public class SaslClientAuthenticator implements Authenticator {
      * {@link #FAILED}.
      */
     public enum SaslState {
-        SEND_APIVERSIONS_REQUEST,                   // Initial state for authentication: client sends ApiVersionsRequest in this state when authenticating
-        RECEIVE_APIVERSIONS_RESPONSE,               // Awaiting ApiVersionsResponse from server
-        SEND_HANDSHAKE_REQUEST,                     // Received ApiVersionsResponse, send SaslHandshake request
-        RECEIVE_HANDSHAKE_RESPONSE,                 // Awaiting SaslHandshake response from server when authenticating
-        INITIAL,                                    // Initial authentication state starting SASL token exchange for configured mechanism, send first token
-        INTERMEDIATE,                               // Intermediate state during SASL token exchange, process challenges and send responses
-        CLIENT_COMPLETE,                            // Sent response to last challenge. If using SaslAuthenticate, wait for authentication status from server, else COMPLETE
-        COMPLETE,                                   // Authentication sequence complete. If using SaslAuthenticate, this state implies successful authentication.
-        FAILED,                                     // Failed authentication due to an error at some stage
-        REAUTH_PROCESS_ORIG_APIVERSIONS_RESPONSE,   // Initial state for re-authentication: process ApiVersionsResponse from original authentication
-        REAUTH_SEND_HANDSHAKE_REQUEST,              // Processed original ApiVersionsResponse, send SaslHandshake request as part of re-authentication
-        REAUTH_RECEIVE_HANDSHAKE_OR_OTHER_RESPONSE, // Awaiting SaslHandshake response from server when re-authenticating, and may receive other, in-flight responses sent prior to start of re-authentication as well
-        REAUTH_INITIAL,                             // Initial re-authentication state starting SASL token exchange for configured mechanism, send first token
+        SEND_APIVERSIONS_REQUEST,                   // 认证的初始状态，进行认证操作时处于此状态的客户端将会发送ApiVersionsRequest
+        RECEIVE_APIVERSIONS_RESPONSE,               // 等待服务端的ApiVersionsResponse
+        SEND_HANDSHAKE_REQUEST,                     // 接收到ApiVersionsResponse,发送握手请求（SaslHandshake request）
+        RECEIVE_HANDSHAKE_RESPONSE,                 // 在认证时，等待服务端的SaslHandshake response
+        INITIAL,                                    // 初始化authentication状态，开始SASL token交换，第一次发送token
+        INTERMEDIATE,                               // SASL token交换的中间状态，处理challenges并发送响应
+        CLIENT_COMPLETE,                            // 对最后一次challenge发送响应，如果使用SaslAuthenticate,则等待服务端的认证状态，否则为COMPLETE
+        COMPLETE,                                   // 身份认证验证完成，如果使用 SaslAuthenticate，此状态意味着身份验证成功。
+        FAILED,                                     // 由于某个阶段的错误导致身份验证失败
+        REAUTH_PROCESS_ORIG_APIVERSIONS_RESPONSE,   // 重新身份验证的初始状态：处理原始身份验证的 ApiVersionsResponse
+        REAUTH_SEND_HANDSHAKE_REQUEST,              // 处理原始 ApiVersionsResponse，发送 SaslHandshake 请求作为重新身份验证的一部分
+        REAUTH_RECEIVE_HANDSHAKE_OR_OTHER_RESPONSE, // 重新验证时等待来自服务器的 SaslHandshake 响应，并且还可能接收在重新验证开始之前发送的其他正在进行的响应
+        REAUTH_INITIAL,                             // 重新认证时，第一次发送token
     }
 
     private static final short DISABLE_KAFKA_SASL_AUTHENTICATE_HEADER = -1;
@@ -122,10 +122,11 @@ public class SaslClientAuthenticator implements Authenticator {
      * used in NetworkClient for Kafka requests. Hence, we can guarantee that every SASL request will throw
      * SchemaException due to correlation id mismatch during reauthentication
      */
-    public static final int MAX_RESERVED_CORRELATION_ID = Integer.MAX_VALUE;
+    public static final int MAX_RESERVED_CORRELATION_ID = Integer.MAX_VALUE; // Sasl 请求的相关 ID 的保留范围
 
     /**
      * We only expect one request in-flight a time during authentication so the small range is fine.
+     * 我们期望在身份认证期间一次只发送一个请求，因此最大最小id值之间的范围不需要特别大
      */
     public static final int MIN_RESERVED_CORRELATION_ID = MAX_RESERVED_CORRELATION_ID - 7;
 
@@ -134,21 +135,21 @@ public class SaslClientAuthenticator implements Authenticator {
      */
     public static boolean isReserved(int correlationId) {
         return correlationId >= MIN_RESERVED_CORRELATION_ID;
-    }
+    } // 判断id是否是被保留的id
 
-    private final Subject subject;
+    private final Subject subject; // 单个实例的相关信息
     private final String servicePrincipal;
     private final String host;
     private final String node;
-    private final String mechanism;
-    private final TransportLayer transportLayer;
+    private final String mechanism; // 身份认证机制
+    private final TransportLayer transportLayer; // 用于底层通信的传输层
     private final SaslClient saslClient;
     private final Map<String, ?> configs;
     private final String clientPrincipalName;
     private final AuthenticateCallbackHandler callbackHandler;
     private final Time time;
     private final Logger log;
-    private final ReauthInfo reauthInfo;
+    private final ReauthInfo reauthInfo; // 重认证信息
 
     // buffers used in `authenticate`
     private NetworkReceive netInBuffer;
@@ -192,6 +193,7 @@ public class SaslClientAuthenticator implements Authenticator {
         this.log = logContext.logger(getClass());
         this.reauthInfo = new ReauthInfo();
 
+        // 设置SaslState，clientPrincipalName并创建saslClient
         try {
             setSaslState(handshakeRequestEnable ? SaslState.SEND_APIVERSIONS_REQUEST : SaslState.INITIAL);
 

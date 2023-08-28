@@ -77,7 +77,7 @@ class ControllerContext extends ControllerChannelContext {
   val stats = new ControllerStats // Controller统计信息类
   var offlinePartitionCount = 0 // 离线分区计数器
   var preferredReplicaImbalanceCount = 0
-  val shuttingDownBrokerIds = mutable.Set.empty[Int // 关闭中Broker的Id列表
+  val shuttingDownBrokerIds = mutable.Set.empty[Int] // 关闭中Broker的Id列表
   private val liveBrokers = mutable.Set.empty[Broker] // 当前运行中的Broker对象列表
   private val liveBrokerEpochs = mutable.Map.empty[Int, Long] // 运行中Broker Epoch列表
   var epoch: Int = KafkaController.InitialControllerEpoch // Controller当前Epoch值

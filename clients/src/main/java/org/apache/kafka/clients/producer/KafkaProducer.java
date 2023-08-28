@@ -1003,6 +1003,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
     @Override
     public Future<RecordMetadata> send(ProducerRecord<K, V> record, Callback callback) {
         // intercept the record, which can be potentially modified; this method does not throw exceptions
+        // 如果设置有拦截器，则消息先经过拦截器的onSend处理
         ProducerRecord<K, V> interceptedRecord = this.interceptors.onSend(record);
         return doSend(interceptedRecord, callback);
     }
@@ -1035,7 +1036,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
         AppendCallbacks<K, V> appendCallbacks = new AppendCallbacks<K, V>(callback, this.interceptors, record);
 
         try {
-            // 判断producer是否在关闭，其实是判断sender是否处于running的状态
+            // 判断producer是否在关闭，如果已经关闭，则抛出异常。如果sender为空或sender不处于running状态，则抛出异常
             throwIfProducerClosed();
             // first make sure the metadata for the topic is available
             long nowMs = time.milliseconds();
@@ -1054,8 +1055,8 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                 throw e;
             }
             nowMs += clusterAndWaitTime.waitedOnMetadataMs;
-            long remainingWaitMs = Math.max(0, maxBlockTimeMs - clusterAndWaitTime.waitedOnMetadataMs);
-            Cluster cluster = clusterAndWaitTime.cluster;
+            long remainingWaitMs = Math.max(0, maxBlockTimeMs - clusterAndWaitTime.waitedOnMetadataMs); // 还剩余多长时间
+            Cluster cluster = clusterAndWaitTime.cluster; // 元数据
             /**
              * 步骤二：
              *  对消息的key和value进行序列化。
@@ -1464,7 +1465,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
      */
     private int partition(ProducerRecord<K, V> record, byte[] serializedKey, byte[] serializedValue, Cluster cluster) {
         if (record.partition() != null)
-            return record.partition();
+            return record.partition(); // 如果已经指定了partition，则直接返回
 
         if (partitioner != null) {
             int customPartition = partitioner.partition(
@@ -1505,8 +1506,8 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
     }
 
     private static class ClusterAndWaitTime {
-        final Cluster cluster;
-        final long waitedOnMetadataMs;
+        final Cluster cluster; // 集群信息
+        final long waitedOnMetadataMs; // 获取元数据消耗的时间
         ClusterAndWaitTime(Cluster cluster, long waitedOnMetadataMs) {
             this.cluster = cluster;
             this.waitedOnMetadataMs = waitedOnMetadataMs;

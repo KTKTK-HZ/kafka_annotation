@@ -41,7 +41,7 @@ import scala.jdk.CollectionConverters._
 *  Dead：无成员且注册数据等待被删除
 *  消费者组从创建到正常工作，需要经历的状态转换Empty -> PreparingRebalance -> CompletingRebalance -> Stable
  */
-private[group] sealed trait GroupState {
+private[group] sealed trait GroupState { // sealed修饰class或者trait，不能再类定义文件之外定义任何新的子类
   val validPreviousStates: Set[GroupState]
 }
 
@@ -137,15 +137,15 @@ private[group] case object Empty extends GroupState {
 // 提供GroupMetadata实例创建方法
 private object GroupMetadata extends Logging {
 
-  def loadGroup(groupId: String,
-                initialState: GroupState,
-                generationId: Int,
-                protocolType: String,
-                protocolName: String,
-                leaderId: String,
-                currentStateTimestamp: Option[Long],
-                members: Iterable[MemberMetadata],
-                time: Time): GroupMetadata = {
+  def loadGroup(groupId: String, // 组ID
+                initialState: GroupState, // 初始状态
+                generationId: Int, // 消费者组Generation号。该值等同于消费者组执行过Rebalance操作的次数，每次执行Rebalance时，该值都+1
+                protocolType: String, // 协议类型，用来标识消费者组被用作哪个场景，现有conusmer和connect两个
+                protocolName: String, // 协议名
+                leaderId: String, // 消费者组leader成员ID，可能不存在
+                currentStateTimestamp: Option[Long], // 最近一次状态变化的时间
+                members: Iterable[MemberMetadata], // 消费者组内所有消费者的元数据
+                time: Time): GroupMetadata = { // 当前时间
     val group = new GroupMetadata(groupId, initialState, time)
     group.generationId = generationId
     group.protocolType = if (protocolType == null || protocolType.isEmpty) None else Some(protocolType)
@@ -156,11 +156,11 @@ private object GroupMetadata extends Logging {
       group.add(member, null)
       info(s"Loaded member $member in group $groupId with generation ${group.generationId}.")
     }
-    group.subscribedTopics = group.computeSubscribedTopics()
+    group.subscribedTopics = group.computeSubscribedTopics() // 收集消费者订阅的主题
     group
   }
 
-  private val MemberIdDelimiter = "-"
+  private val MemberIdDelimiter = "-" // MemberId之间的分隔符
 }
 
 /**
@@ -871,6 +871,7 @@ private[group] class GroupMetadata(val groupId: String, // 组ID
 
   def hasOffsets: Boolean = offsets.nonEmpty || pendingOffsetCommits.nonEmpty || pendingTransactionalOffsetCommits.nonEmpty
 
+  // 判断状态转换是否合法，主要做法是判断目前状态是不是目标状态的前置状态
   private def assertValidTransition(targetState: GroupState): Unit = {
     if (!targetState.validPreviousStates.contains(state))
       throw new IllegalStateException("Group %s should be in the %s states before moving to %s state. Instead it is in %s state"

@@ -31,6 +31,7 @@ case class MemberSummary(memberId: String, // 成员ID，由Kafka自动生成，
                          assignment: Array[Byte]) // 成员订阅分区
 
 // 仅仅定义了一个方法，供上层组件调用，从一组给定的分区分配策略详情中提取出分区分配策略的名称，并将其封装成一个集合对象，然后返回
+// 使用Set返回是因为Set内没有重复值
 private object MemberMetadata {
   def plainProtocolSet(supportedProtocols: List[(String, Array[Byte])]) = supportedProtocols.map(_._1).toSet
 }
@@ -61,14 +62,14 @@ private[group] class MemberMetadata(var memberId: String,
                                     val groupInstanceId: Option[String],
                                     val clientId: String,
                                     val clientHost: String,
-                                    var rebalanceTimeoutMs: Int, // Rebalance操作超时时间
+                                    var rebalanceTimeoutMs: Int, // Rebalance操作超时时间，即消费者的max.poll.interval.ms
                                     var sessionTimeoutMs: Int, // 会话超时时间
-                                    val protocolType: String, // 对消费者组而言，是"consumer"
+                                    val protocolType: String, // 对消费者组而言，是"consumer"，Kafka connect中的消费者类型为connect
                                     var supportedProtocols: List[(String, Array[Byte])], // 成员配置的多套分区分配策略
                                     var assignment: Array[Byte] = Array.empty[Byte] /**分区分配方案*/) {
 
-  var awaitingJoinCallback: JoinGroupResult => Unit = _ // 表示组成员是否正在等待加入组
-  var awaitingSyncCallback: SyncGroupResult => Unit = _ // 表示组成员是否正在等待GroupCoordinator发送分配方案
+  var awaitingJoinCallback: JoinGroupResult => Unit = _ // 成员入组的回调函数
+  var awaitingSyncCallback: SyncGroupResult => Unit = _ // 组成员等待GroupCoordinator发送分配方案的回调函数
   var isNew: Boolean = false // 表示是否是消费者组下的新成员
 
   def isStaticMember: Boolean = groupInstanceId.isDefined

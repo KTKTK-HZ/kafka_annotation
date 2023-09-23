@@ -26,7 +26,7 @@ public class RollParams {
     public final int maxSegmentBytes; // 日志段最大byte数
     public final long maxTimestampInMessages; // 待写入消息中的最大时间戳
     public final long maxOffsetInMessages; // 待写入消息的最大位移值
-    public final int messagesSize; // 当前消息段的大小
+    public final int messagesSize; // 待写入消息段的大小
     public final long now; // 当前时间
 
     public RollParams(long maxSegmentMs,

@@ -1367,7 +1367,7 @@ public class KafkaAdminClient extends AdminClient {
         private void processRequests() {
             long now = time.milliseconds();
             while (true) {
-                // Copy newCalls into pendingCalls.
+                // Copy newCalls into pendingCalls.将newCall中所有的内容转移到pendingCalls
                 drainNewCalls();
 
                 // Check if the AdminClient thread should shut down.

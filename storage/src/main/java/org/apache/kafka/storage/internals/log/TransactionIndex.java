@@ -182,7 +182,7 @@ public class TransactionIndex implements Closeable {
 
     /**
      * Do a basic sanity check on this index to detect obvious problems.
-     *
+     * 只进行基础性的检查，即比较lastOffset和startOffset的大小
      * @throws CorruptIndexException if any problems are found.
      */
     public void sanityCheck() {

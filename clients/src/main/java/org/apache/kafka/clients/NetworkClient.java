@@ -1019,6 +1019,7 @@ public class NetworkClient implements KafkaClient {
 
     /**
      * Initiate a connection to the given node
+     * 在判断ready或者updatemata时会调用该方法进行连接初始化
      * @param node the node to connect to
      * @param now current time in epoch milliseconds
      */
@@ -1174,6 +1175,7 @@ public class NetworkClient implements KafkaClient {
 
         /**
          * Add a metadata request to the list of sends if we can make one
+         * 将元数据请求添加至发送列表
          */
         private long maybeUpdate(long now, Node node) {
             String nodeConnectionId = node.idString();

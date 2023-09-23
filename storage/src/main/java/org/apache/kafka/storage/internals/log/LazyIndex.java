@@ -40,7 +40,7 @@ import org.apache.kafka.common.utils.Utils;
  *
  * Methods of this class are thread safe. Make sure to check `AbstractIndex` subclasses
  * documentation to establish their thread safety.
- * 它定义了AbstractIndex上的一个包装类，实现索引项延迟加载。这个类主要是为了提高性能。
+ * 它定义了AbstractIndex上的一个包装类，实现索引项延迟加载。这个类主要是为了提高性能，在存在大量segment时，其保证了broker的启动和关闭。
  */
 public class LazyIndex<T extends AbstractIndex> {
 
@@ -141,8 +141,8 @@ public class LazyIndex<T extends AbstractIndex> {
 
     private final Lock lock = new ReentrantLock();
     private final long baseOffset;
-    private final int maxIndexSize;
-    private final IndexType indexType;
+    private final int maxIndexSize; // index最大的size值
+    private final IndexType indexType; // indexType只有OFFSET、TIME两种枚举
 
     private volatile IndexWrapper indexWrapper;
 

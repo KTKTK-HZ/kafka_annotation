@@ -89,7 +89,7 @@ public class FileRecords extends AbstractRecords implements Closeable {
 
     @Override
     public int sizeInBytes() {
-        return size.get();
+        return size.get(); // 获取FileRecord的大小，size的类型为AtomicInteger
     }
 
     /**
@@ -111,7 +111,7 @@ public class FileRecords extends AbstractRecords implements Closeable {
     /**
      * Read log batches into the given buffer until there are no bytes remaining in the buffer or the end of the file
      * is reached.
-     *
+     * 将日志批次读入给定缓冲区，直到缓冲区中没有剩余字节或到达文件末尾。
      * @param buffer The buffer to write the batches to
      * @param position Position in the buffer to read from
      * @throws IOException If an I/O error occurs, see {@link FileChannel#read(ByteBuffer, long)} for details on the

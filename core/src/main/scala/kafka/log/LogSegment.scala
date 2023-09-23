@@ -75,10 +75,11 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
 
   // 判断日志段是否已经达到了切分的标准
   def shouldRoll(rollParams: RollParams): Boolean = {
+    // 判断距离上次roll时间是否大于maxSegmenMs
     val reachedRollMs = timeWaitedForRoll(rollParams.now, rollParams.maxTimestampInMessages) > rollParams.maxSegmentMs - rollJitterMs
-    size > rollParams.maxSegmentBytes - rollParams.messagesSize ||
-      (size > 0 && reachedRollMs) ||
-      offsetIndex.isFull || timeIndex.isFull || !canConvertToRelativeOffset(rollParams.maxOffsetInMessages)
+    size > rollParams.maxSegmentBytes - rollParams.messagesSize || // 当前activeSegment在追加本次消息后，长度操作LogSegment允许的最大值
+      (size > 0 && reachedRollMs) || // 当前activeSegment存活时间超过允许的最大值
+      offsetIndex.isFull || timeIndex.isFull || !canConvertToRelativeOffset(rollParams.maxOffsetInMessages) // 索引文件满了或判断新加入的message能否转化为相对offset
   }
 
   def resizeIndexes(size: Int): Unit = {
@@ -86,6 +87,7 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
     timeIndex.resize(size)
   }
 
+  // 对索引进行完整性检测
   def sanityCheck(timeIndexFileNewlyCreated: Boolean): Unit = {
     if (lazyOffsetIndex.file.exists) {
       // Resize the time index file to 0 if it is newly created.
@@ -99,7 +101,7 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
     else throw new NoSuchFileException(s"Offset index file ${lazyOffsetIndex.file.getAbsolutePath} does not exist")
   }
 
-  private var created = time.milliseconds
+  private var created = time.milliseconds // logSegment创建的时间
 
   /* the number of bytes since we last added an entry in the offset index */
   private var bytesSinceLastIndexEntry = 0
@@ -113,7 +115,7 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
   def maxTimestampAndOffsetSoFar_= (timestampOffset: TimestampOffset): Unit = _maxTimestampAndOffsetSoFar = timestampOffset
   def maxTimestampAndOffsetSoFar: TimestampOffset = {
     if (_maxTimestampAndOffsetSoFar == TimestampOffset.UNKNOWN)
-      _maxTimestampAndOffsetSoFar = timeIndex.lastEntry
+      _maxTimestampAndOffsetSoFar = timeIndex.lastEntry // 返回时间index的最后一个entry对
     _maxTimestampAndOffsetSoFar
   }
 
@@ -538,6 +540,7 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
   /**
     * If not previously loaded,
     * load the timestamp of the first message into memory.
+    *  将log中第一个消息批（batch）中的最大时间戳赋给rollingBasedTimestamp
     */
   private def loadFirstBatchTimestamp(): Unit = {
     if (rollingBasedTimestamp.isEmpty) {
@@ -555,12 +558,15 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
    * If the first batch does not have a timestamp, we use the wall clock time to determine when to roll a segment. A
    * segment is rolled if the difference between the current wall clock time and the segment create time exceeds the
    * segment rolling time.
+   *  1、如果此segment的第一个recordBatch的时间戳存在，就用现在要添加的消息集中最大的时间戳，减去此segment第一个recordBatch的时间戳
+   *  2、如果此时间戳存在，返回当前系统时间与segment创建的时间差
    */
   def timeWaitedForRoll(now: Long, messageTimestamp: Long): Long = {
     // Load the timestamp of the first message into memory
+    // loadFirstBatchTimestamp：如果此segment的第一个消息批的最大时间戳存在，loadFirstBatchTimestamp置为此时间
     loadFirstBatchTimestamp()
     rollingBasedTimestamp match {
-      case Some(t) if t >= 0 => messageTimestamp - t
+      case Some(t) if t >= 0 => messageTimestamp - t // 正在添加消息集的时间戳减去log第一个batch的时间戳
       case _ => now - created
     }
   }

@@ -1151,7 +1151,7 @@ class Partition(val topicPartition: TopicPartition,
         needsShrinkIsr()
       }
     }
-
+    // 判断是否需要执行ISR收缩
     if (needsIsrUpdate) {
       val alterIsrUpdateOpt = inWriteLock(leaderIsrUpdateLock) {
         leaderLogIfLocal.flatMap { leaderLog =>

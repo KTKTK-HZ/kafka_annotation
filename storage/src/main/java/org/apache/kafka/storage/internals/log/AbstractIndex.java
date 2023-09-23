@@ -318,6 +318,7 @@ public abstract class AbstractIndex implements Closeable {
 
     /**
      * Check if a particular offset is valid to be appended to this index.
+     * 检查添加到该索引的特定偏移量是否有效
      * @param offset The offset to check
      * @return true if this offset is valid to be appended to this index; false otherwise
      */
@@ -557,6 +558,7 @@ public abstract class AbstractIndex implements Closeable {
         return result;
     }
 
+    // 如果要添加的offset与baseoffset之间的差值小于0或者大于Int的最大值，返回Optional.empty(),用于isPresent()判断
     private OptionalInt toRelative(long offset) {
         long relativeOffset = offset - baseOffset;
         if (relativeOffset < 0 || relativeOffset > Integer.MAX_VALUE)

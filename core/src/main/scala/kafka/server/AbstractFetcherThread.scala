@@ -147,7 +147,7 @@ abstract class AbstractFetcherThread(name: String, // 线程名称
   private def handlePartitionsWithErrors(partitions: Iterable[TopicPartition], methodName: String): Unit = {
     if (partitions.nonEmpty) {
       debug(s"Handling errors in $methodName for partitions $partitions")
-      delayPartitions(partitions, fetchBackOffMs)
+      delayPartitions(partitions, fetchBackOffMs) // 真正处理错误的地方
     }
   }
 
@@ -811,10 +811,12 @@ abstract class AbstractFetcherThread(name: String, // 线程名称
     }
   }
 
+  // 延迟分区，将分区信息从LinkedHashMap中删除，然后重新添加到LinkedHashMap最后进行处理
   def delayPartitions(partitions: Iterable[TopicPartition], delay: Long): Unit = {
     partitionMapLock.lockInterruptibly()
     try {
       for (partition <- partitions) {
+        // 如果state不为空，则执行处理逻辑
         Option(partitionStates.stateValue(partition)).foreach { currentFetchState =>
           if (!currentFetchState.isDelayed) {
             partitionStates.updateAndMoveToEnd(partition, PartitionFetchState(currentFetchState.topicId, currentFetchState.fetchOffset,
@@ -827,6 +829,7 @@ abstract class AbstractFetcherThread(name: String, // 线程名称
     } finally partitionMapLock.unlock()
   }
 
+  // 移除给定的分区
   def removePartitions(topicPartitions: Set[TopicPartition]): Map[TopicPartition, PartitionFetchState] = {
     partitionMapLock.lockInterruptibly()
     try {
@@ -851,30 +854,33 @@ abstract class AbstractFetcherThread(name: String, // 线程名称
     } finally partitionMapLock.unlock()
   }
 
+  // 获取分区数目
   def partitionCount: Int = {
     partitionMapLock.lockInterruptibly()
     try partitionStates.size
     finally partitionMapLock.unlock()
   }
 
+  // 获取partitions集合
   def partitions: Set[TopicPartition] = {
     partitionMapLock.lockInterruptibly()
     try partitionStates.partitionSet.asScala.toSet
     finally partitionMapLock.unlock()
   }
 
-  // Visible for testing
+  // Visible for testing 获取拉取状态
   private[server] def fetchState(topicPartition: TopicPartition): Option[PartitionFetchState] = inLock(partitionMapLock) {
     Option(partitionStates.stateValue(topicPartition))
   }
 
+  // 将record转换为MemoryRecords
   protected def toMemoryRecords(records: Records): MemoryRecords = {
-    (records: @unchecked) match {
+    (records: @unchecked) match { // @unchecked注解用来抑制编译器发出警告，这里用来抑制“match不完整”警告
       case r: MemoryRecords => r
       case r: FileRecords =>
-        val buffer = ByteBuffer.allocate(r.sizeInBytes)
-        r.readInto(buffer, 0)
-        MemoryRecords.readableRecords(buffer)
+        val buffer = ByteBuffer.allocate(r.sizeInBytes) // 按照r的大小分配buffer
+        r.readInto(buffer, 0) // readInto方法将日志批次读入给定缓冲区，直至缓冲器满或者到达文件末尾
+        MemoryRecords.readableRecords(buffer) //readableRecords方法使用buffer中的数据创建新MemoryRecords
     }
   }
 }

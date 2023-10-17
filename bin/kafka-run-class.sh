@@ -14,31 +14,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-if [ $# -lt 1 ];
+if [ $# -lt 1 ]; # 检查传入参数的数量，[$#] 表示传入脚本的参数总数，如果小于1，则打印提示信息并退出
 then
   echo "USAGE: $0 [-daemon] [-name servicename] [-loggc] classname [opts]"
   exit 1
 fi
 
-# CYGWIN == 1 if Cygwin is detected, else 0.
-if [[ $(uname -a) =~ "CYGWIN" ]]; then
-  CYGWIN=1
+# CYGWIN == 1 if Cygwin is detected, else 0.检测当前系统是否是Cygwin环境
+if [[ $(uname -a) =~ "CYGWIN" ]]; then # 使用uname -a命令获取系统信息，通过正则表达式=~匹配输出中是否包含"CYGWIN"字样
+  CYGWIN=1 # 如果包含,设置环境变量CYGWIN=1
 else
-  CYGWIN=0
+  CYGWIN=0 # 否则设置CYGWIN=0
 fi
 
-if [ -z "$INCLUDE_TEST_JARS" ]; then
+if [ -z "$INCLUDE_TEST_JARS" ]; then # 这里判断是否包含test_jar，-z用来检查字符串是否为空，类似的单字母选项还有，-n 判断字符串不为空，-e 判断文件是否存在
   INCLUDE_TEST_JARS=false
 fi
 
 # Exclude jars not necessary for running commands.
-regex="(-(test|test-sources|src|scaladoc|javadoc)\.jar|jar.asc|connect-file.*\.jar)$"
+regex="(-(test|test-sources|src|scaladoc|javadoc)\.jar|jar.asc|connect-file.*\.jar)$" # $表示字符结束
 should_include_file() {
   if [ "$INCLUDE_TEST_JARS" = true ]; then
     return 0
   fi
-  file=$1
-  if [ -z "$(echo "$file" | grep -E "$regex")" ] ; then
+  file=$1 # 传入函数的第一个参数
+  if [ -z "$(echo "$file" | grep -E "$regex")" ] ; then # 使用管道将file的内容传给grep -E进行正则匹配
     return 0
   else
     return 1
@@ -49,17 +49,17 @@ base_dir=$(dirname $0)/..
 
 if [ -z "$SCALA_VERSION" ]; then
   SCALA_VERSION=2.13.10
-  if [[ -f "$base_dir/gradle.properties" ]]; then
-    SCALA_VERSION=`grep "^scalaVersion=" "$base_dir/gradle.properties" | cut -d= -f 2`
+  if [[ -f "$base_dir/gradle.properties" ]]; then # grep从gradle文件中获取scalaVersion=开头的行，然后使用cut分割获取
+    SCALA_VERSION=`grep "^scalaVersion=" "$base_dir/gradle.properties" | cut -d= -f 2` # 以=分割，获取第二段
   fi
 fi
 
 if [ -z "$SCALA_BINARY_VERSION" ]; then
-  SCALA_BINARY_VERSION=$(echo $SCALA_VERSION | cut -f 1-2 -d '.')
+  SCALA_BINARY_VERSION=$(echo $SCALA_VERSION | cut -f 1-2 -d '.') # 以“.”分割，获取第一个和第二个字段，例如2.13.0则获取2.13
 fi
 
 # run ./gradlew copyDependantLibs to get all dependant jars in a local dir
-shopt -s nullglob
+shopt -s nullglob # shopt是shell内建命令，-s表示激活指定shell行为，nullglob模式时如果没有匹配的文件，命令不会失败，而是返回一个空列表。
 if [ -z "$UPGRADE_KAFKA_STREAMS_TEST_VERSION" ]; then
   for dir in "$base_dir"/core/build/dependant-libs-${SCALA_VERSION}*;
   do

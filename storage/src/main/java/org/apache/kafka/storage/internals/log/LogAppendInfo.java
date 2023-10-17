@@ -259,7 +259,7 @@ public class LogAppendInfo {
 
     /**
      * Get the (maximum) number of messages described by LogAppendInfo
-     *
+     * 利用firstOffset和lastOffset这两个变量,在合法范围内计算了消息数
      * @return Maximum possible number of messages described by LogAppendInfo
      */
     public long numMessages() {

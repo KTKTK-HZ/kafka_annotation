@@ -255,7 +255,7 @@ class LogSegments(topicPartition: TopicPartition) {
 object LogSegments {
   /**
    * Calculate a log's size (in bytes) from the provided log segments.
-   *
+   * 将一个log的logSegment集合传入该方法，得到一个总的大小
    * @param segments The log segments to calculate the size of
    * @return Sum of the log segments' sizes (in bytes)
    */

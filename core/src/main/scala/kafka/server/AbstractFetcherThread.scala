@@ -56,7 +56,7 @@ abstract class AbstractFetcherThread(name: String, // 线程名称
                                      clientId: String, // ClientId，用于日志输出
                                      val leader: LeaderEndPoint, // Leader分区所在broker的各项信息,该线程从这些broker上拉取数据
                                      failedPartitions: FailedPartitions, // 处理过程中出现失败的分区集合
-                                     val fetchTierStateMachine: TierStateMachine,
+                                     val fetchTierStateMachine: TierStateMachine, // fetchTierStateMachine表示获取操作的状态机。它主要用于控制获取过程的状态流转。
                                      fetchBackOffMs: Int = 0, // 重试间隔时间，即replica.fetch.backoff.ms
                                      isInterruptible: Boolean = true, // 线程是否允许中断
                                      val brokerTopicStats: BrokerTopicStats) //Broker端主题的各类监控指标，常见的有MessagesInPerSec、BytesInPerSec等
@@ -118,8 +118,8 @@ abstract class AbstractFetcherThread(name: String, // 线程名称
    * 将LEO调整到分区高水位处
    * */
   override def doWork(): Unit = {
-    maybeTruncate() // 执行副本截断操作
-    maybeFetch() // 执行消息获取操作
+    maybeTruncate() // 执行副本截断操作，将本地日志高水位线之前的日志截断删除，主要用于Follower副本维护本地存储
+    maybeFetch() // 执行消息获取操作，从Leader副本获取最新日志并追加到本地存储
   }
 
   private def maybeFetch(): Unit = {
@@ -162,7 +162,7 @@ abstract class AbstractFetcherThread(name: String, // 线程名称
     partitionStates.partitionStateMap.forEach { (tp, state) =>
       if (state.isTruncating) {
         latestEpoch(tp) match {
-          case Some(epoch) if isOffsetForLeaderEpochSupported =>
+          case Some(epoch) if isOffsetForLeaderEpochSupported => // 如果Epoch存在并且支持按Epoch截断,将该分区添加到有Epoch的分组
             partitionsWithEpochs += tp -> new EpochData()
               .setPartition(tp.partition)
               .setCurrentLeaderEpoch(state.currentLeaderEpoch)
@@ -573,7 +573,7 @@ abstract class AbstractFetcherThread(name: String, // 线程名称
    * @param fetchOffsets the partitions to update fetch offset and maybe mark truncation complete
    */
   private def updateFetchOffsetAndMaybeMarkTruncationComplete(fetchOffsets: Map[TopicPartition, OffsetTruncationState]): Unit = {
-    val newStates: Map[TopicPartition, PartitionFetchState] = partitionStates.partitionStateMap.asScala
+    val newStates: Map[TopicPartition, PartitionFetchState] = partitionStates.partitionStateMap.asScala // partitionStateMap其实就是将partitionstates中的状态封装成一个不可变的map
       .map { case (topicPartition, currentFetchState) =>
         val maybeTruncationComplete = fetchOffsets.get(topicPartition) match {
           case Some(offsetTruncationState) =>
@@ -818,14 +818,14 @@ abstract class AbstractFetcherThread(name: String, // 线程名称
       for (partition <- partitions) {
         // 如果state不为空，则执行处理逻辑
         Option(partitionStates.stateValue(partition)).foreach { currentFetchState =>
-          if (!currentFetchState.isDelayed) {
+          if (!currentFetchState.isDelayed) { // 如果该分区还没被延迟时，才执行逻辑
             partitionStates.updateAndMoveToEnd(partition, PartitionFetchState(currentFetchState.topicId, currentFetchState.fetchOffset,
               currentFetchState.lag, currentFetchState.currentLeaderEpoch, Some(new DelayedItem(delay)),
               currentFetchState.state, currentFetchState.lastFetchedEpoch))
           }
         }
       }
-      partitionMapCond.signalAll()
+      partitionMapCond.signalAll() // 释放所有在partitionMapCond条件变量上等待的线程
     } finally partitionMapLock.unlock()
   }
 
@@ -963,7 +963,7 @@ case class ClientIdTopicPartition(clientId: String, topicPartition: TopicPartiti
   override def toString: String = s"$clientId-$topicPartition"
 }
 
-// 副本的状态
+// 副本读取状态（注意和分区状态的区别）
 sealed trait ReplicaState
 // 截断中
 case object Truncating extends ReplicaState
@@ -1020,7 +1020,7 @@ case class PartitionFetchState(topicId: Option[Uuid],
 // 一个用来记录offset和是否完成截断的类
 case class OffsetTruncationState(offset: Long, truncationCompleted: Boolean) {
 
-  def this(offset: Long) = this(offset, true)
+  def this(offset: Long) = this(offset, true) // 该构造函数允许只提供一个offset
 
   override def toString: String = s"TruncationState(offset=$offset, completed=$truncationCompleted)"
 }

@@ -50,7 +50,7 @@ class ReplicaFetcherThread(name: String,
   override protected val isOffsetForLeaderEpochSupported: Boolean = metadataVersionSupplier().isOffsetForLeaderEpochSupported
 
   override protected def latestEpoch(topicPartition: TopicPartition): Option[Int] = {
-    replicaMgr.localLogOrException(topicPartition).latestEpoch
+    replicaMgr.localLogOrException(topicPartition).latestEpoch // 获取给定主题分区最新的epoch
   }
 
   override protected def logStartOffset(topicPartition: TopicPartition): Long = {

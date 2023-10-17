@@ -24,7 +24,13 @@ import org.slf4j.Logger;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-
+/**
+ * 1、在线程初始化时,可以指定一个isInterruptible标志,表示线程是否可以响应中断。
+ * 2、提供了initiateShutdown方法来通知线程准备关闭。
+ * 3、线程通过isShutdownRequested方法检查是否有关闭请求。
+ * 4、线程的run方法需要先检查关闭请求,如果有则进行关闭前的收尾工作。
+ * 5、join线程时会等待关闭完成才退出。
+ * */
 public abstract class ShutdownableThread extends Thread {
 
     public final String logPrefix;

@@ -1331,7 +1331,7 @@ class KafkaApis(val requestChannel: RequestChannel, // 请求通道
     val completeTopicMetadata =  unknownTopicIdsTopicMetadata ++
       topicMetadata ++ unauthorizedForCreateTopicMetadata ++ unauthorizedForDescribeTopicMetadata
 
-    val brokers = metadataCache.getAliveBrokerNodes(request.context.listenerName)
+    val brokers = metadataCache.getAliveBrokerNodes(request.context.listenerName) // 获取到broker的信息
 
     trace("Sending topic metadata %s and brokers %s for correlation id %d to client %s".format(completeTopicMetadata.mkString(","),
       brokers.mkString(","), request.header.correlationId, request.header.clientId))

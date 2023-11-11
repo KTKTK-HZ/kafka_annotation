@@ -222,6 +222,7 @@ class ReplicaManager(val config: KafkaConfig, // kafka配置管理类
   /* epoch of the controller that last changed the leader */
   @volatile private[server] var controllerEpoch: Int = KafkaController.InitialControllerEpoch
   protected val localBrokerId = config.brokerId
+  // ReplicaManager实例通过allPartitions维护所在broker上的所有副本
   protected val allPartitions = new Pool[TopicPartition, HostedPartition](
     valueFactory = Some(tp => HostedPartition.Online(Partition(tp, time, this)))
   )
@@ -241,13 +242,13 @@ class ReplicaManager(val config: KafkaConfig, // kafka配置管理类
   private var logDirFailureHandler: LogDirFailureHandler = _
 
   private class LogDirFailureHandler(name: String, haltBrokerOnDirFailure: Boolean) extends ShutdownableThread(name) {
-    override def doWork(): Unit = {
-      val newOfflineLogDir = logDirFailureChannel.takeNextOfflineLogDir()
+    override def doWork(): Unit = { // 定义线程执行时的具体任务
+      val newOfflineLogDir = logDirFailureChannel.takeNextOfflineLogDir() // 获取下一个下线的日志地址
       if (haltBrokerOnDirFailure) {
         fatal(s"Halting broker because dir $newOfflineLogDir is offline")
         Exit.halt(1)
       }
-      handleLogDirFailure(newOfflineLogDir)
+      handleLogDirFailure(newOfflineLogDir) // 进行真正的处理
     }
   }
 
@@ -311,7 +312,7 @@ class ReplicaManager(val config: KafkaConfig, // kafka配置管理类
     // A follower can lag behind leader for up to config.replicaLagTimeMaxMs x 1.5 before it is removed from ISR
     // 周期性检查ISR是否有replica过期，从而将过期的副本从ISR中剔除
     scheduler.schedule("isr-expiration", () => maybeShrinkIsr(), 0L, config.replicaLagTimeMaxMs / 2)
-    // 定期关闭空闲的同步日志副本
+    // 定期关闭空闲的同步副本
     scheduler.schedule("shutdown-idle-replica-alter-log-dirs-thread", () => shutdownIdleReplicaAlterLogDirsThread(), 0L, 10000L)
 
     // If inter-broker protocol (IBP) < 1.0, the controller will send LeaderAndIsrRequest V0 which does not include isNew field.
@@ -529,8 +530,8 @@ class ReplicaManager(val config: KafkaConfig, // kafka配置管理类
   }
 
   def onlinePartition(topicPartition: TopicPartition): Option[Partition] = {
-    getPartition(topicPartition) match {
-      case HostedPartition.Online(partition) => Some(partition)
+    getPartition(topicPartition) match { // getPartition将会筛选本地分区
+      case HostedPartition.Online(partition) => Some(partition) // 判断分区是不是Online
       case _ => None
     }
   }
@@ -1745,6 +1746,7 @@ class ReplicaManager(val config: KafkaConfig, // kafka配置管理类
       stateChangeLogger.info(s"Stopped fetchers as part of become-follower request from controller $controllerId " +
         s"epoch $controllerEpoch with correlation id $correlationId for ${partitionsToMakeFollower.size} partitions")
 
+      // 完成那些延迟请求的处理
       partitionsToMakeFollower.foreach { partition =>
         completeDelayedFetchOrProduceRequests(partition.topicPartition)
       }
@@ -1887,38 +1889,40 @@ class ReplicaManager(val config: KafkaConfig, // kafka配置管理类
 
   /**
    * The log directory failure handler for the replica
-   *
+   * 本方法接收两个参数，失败日志目录的绝对路径，一个boolean值sendZkNotification
    * @param dir                     the absolute path of the log directory
    * @param sendZkNotification      check if we need to send notification to zookeeper node (needed for unit test)
    */
   def handleLogDirFailure(dir: String, sendZkNotification: Boolean = true): Unit = {
-    if (!logManager.isLogDirOnline(dir))
+    if (!logManager.isLogDirOnline(dir)) // 判断目录dir是否已经离线失效，如果已离线则直接返回
       return
     warn(s"Stopping serving replicas in dir $dir")
     replicaStateChangeLock synchronized {
       val newOfflinePartitions = onlinePartitionsIterator.filter { partition =>
         partition.log.exists { _.parentDir == dir }
-      }.map(_.topicPartition).toSet
+      }.map(_.topicPartition).toSet // 从onlinePartitionsIterator迭代器中筛选出那些日志的父目录等于给定目录的分区，并返回这些分区的主题分区的集合。
 
       val partitionsWithOfflineFutureReplica = onlinePartitionsIterator.filter { partition =>
         partition.futureLog.exists { _.parentDir == dir }
-      }.toSet
+      }.toSet // 筛选出存在于所制定dir中的future副本
 
-      replicaFetcherManager.removeFetcherForPartitions(newOfflinePartitions)
+      replicaFetcherManager.removeFetcherForPartitions(newOfflinePartitions) // 移除与已经出现故障的日志目录有关的副本同步任务
+      // 以下++操作符将两个集合合并在一起，分别为已经彻底离线的分区和正在迁移但是目标目录已经离线的分区
       replicaAlterLogDirsManager.removeFetcherForPartitions(newOfflinePartitions ++ partitionsWithOfflineFutureReplica.map(_.topicPartition))
 
       partitionsWithOfflineFutureReplica.foreach(partition => partition.removeFutureLocalReplica(deleteFromLogDir = false))
       newOfflinePartitions.foreach { topicPartition =>
-        markPartitionOffline(topicPartition)
+        markPartitionOffline(topicPartition) // 将newOfflinePartitions中的分区标记为离线
       }
       newOfflinePartitions.map(_.topic).foreach { topic: String =>
-        maybeRemoveTopicMetrics(topic)
+        maybeRemoveTopicMetrics(topic) // 移除响应监控
       }
-      highWatermarkCheckpoints = highWatermarkCheckpoints.filter { case (checkpointDir, _) => checkpointDir != dir }
+      highWatermarkCheckpoints = highWatermarkCheckpoints.filter { case (checkpointDir, _) => checkpointDir != dir } // 删除与故障日志目录有关的高水位信息
 
       warn(s"Broker $localBrokerId stopped fetcher for partitions ${newOfflinePartitions.mkString(",")} and stopped moving logs " +
            s"for partitions ${partitionsWithOfflineFutureReplica.mkString(",")} because they are in the failed log directory $dir.")
     }
+    // 其作用是在出现目录故障之后，在检查点更新、日志关闭、Metrics删除、清理和日志目录方面达成一致
     logManager.handleLogDirFailure(dir)
 
     if (sendZkNotification)

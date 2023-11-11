@@ -33,6 +33,7 @@ import org.apache.zookeeper.KeeperException.Code
 
 import scala.collection.{Map, Seq, mutable}
 
+// 分区状态机的抽象类，定义了一些公共方法，同时也给出了处理分区状态转换的入口方法handleStateChanges的签名
 abstract class PartitionStateMachine(controllerContext: ControllerContext) extends Logging {
   /**
    * Invoked on successful controller election.
@@ -115,6 +116,9 @@ abstract class PartitionStateMachine(controllerContext: ControllerContext) exten
 }
 
 /**
+ * PartitionStateMachine唯一的继承子类。它实现了分区状态机的主体逻辑功能，其重写了父类的handleStateChanges方法，并配以私有的
+ * doHandleStateChanges方法，共同实现分区状态转换的操作。
+ * 每个Broker进程启动时，会在创建KafkaController对象的过程中，生成ZkPartitionStateMachine实例，而只有Controller组件所在的Broker，才会启动分区状态机
  * This class represents the state machine for partitions. It defines the states that a partition can be in, and
  * transitions to move the partition to another legal state. The different states that a partition can be in are -
  * 1. NonExistentPartition: This state indicates that the partition was either never created or was created and then
@@ -528,6 +532,7 @@ class ZkPartitionStateMachine(config: KafkaConfig,
   }
 }
 
+// 分区Leader选举算法，和四种Leader选举场景相对应
 object PartitionLeaderElectionAlgorithms {
   def offlinePartitionLeaderElection(assignment: Seq[Int], isr: Seq[Int], liveReplicas: Set[Int], uncleanLeaderElectionEnabled: Boolean, controllerContext: ControllerContext): Option[Int] = {
     assignment.find(id => liveReplicas.contains(id) && isr.contains(id)).orElse {
@@ -555,22 +560,28 @@ object PartitionLeaderElectionAlgorithms {
   }
 }
 
-sealed trait PartitionLeaderElectionStrategy
-final case class OfflinePartitionLeaderElectionStrategy(allowUnclean: Boolean) extends PartitionLeaderElectionStrategy
-final case object ReassignPartitionLeaderElectionStrategy extends PartitionLeaderElectionStrategy
-final case object PreferredReplicaPartitionLeaderElectionStrategy extends PartitionLeaderElectionStrategy
-final case object ControlledShutdownPartitionLeaderElectionStrategy extends PartitionLeaderElectionStrategy
+// 定义4类分区Leader选举策略，即发生leader选举的4种场景
+sealed trait PartitionLeaderElectionStrategy // 分区Leader选举策略接口
+final case class OfflinePartitionLeaderElectionStrategy(allowUnclean: Boolean) extends PartitionLeaderElectionStrategy // 离线分区Leader选举策略
+final case object ReassignPartitionLeaderElectionStrategy extends PartitionLeaderElectionStrategy // 分区副本重分配Leader选举策略
+final case object PreferredReplicaPartitionLeaderElectionStrategy extends PartitionLeaderElectionStrategy // 分区Preferred副本Leader选举策略
+final case object ControlledShutdownPartitionLeaderElectionStrategy extends PartitionLeaderElectionStrategy // Broker Controlled关闭时Leader选举策略
 
 sealed trait PartitionState {
-  def state: Byte
-  def validPreviousStates: Set[PartitionState]
+  def state: Byte // 状态序号，没有实际的用途
+  def validPreviousStates: Set[PartitionState] // 合法前置状态集
 }
 
+// 定义了四种分区状态和他们的流转
+/**
+ * 分区被创建后被设置成这个状态，表明它是一个全新的分区对象。
+ * 处于这个状态的分区，被Kafka认为是“未初始化”，因此，不能选举Leader。
+ * */
 case object NewPartition extends PartitionState {
   val state: Byte = 0
   val validPreviousStates: Set[PartitionState] = Set(NonExistentPartition)
 }
-
+// 分区正式提供服务时所处于的状态
 case object OnlinePartition extends PartitionState {
   val state: Byte = 1
   val validPreviousStates: Set[PartitionState] = Set(NewPartition, OnlinePartition, OfflinePartition)

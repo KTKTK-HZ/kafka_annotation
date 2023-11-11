@@ -610,23 +610,24 @@ class KafkaServer(
     }
   }
 
+  // 创建副本管理器的工厂方法
   protected def createReplicaManager(isShuttingDown: AtomicBoolean): ReplicaManager = {
     new ReplicaManager(
-      metrics = metrics,
-      config = config,
-      time = time,
-      scheduler = kafkaScheduler,
-      logManager = logManager,
-      remoteLogManager = remoteLogManager,
-      quotaManagers = quotaManagers,
-      metadataCache = metadataCache,
-      logDirFailureChannel = logDirFailureChannel,
-      alterPartitionManager = alterPartitionManager,
-      brokerTopicStats = brokerTopicStats,
+      metrics = metrics, // 记录系统活动和性能指标的度量
+      config = config, // 配置对象，包含Kafka的各种配置
+      time = time, // 时间对象，用于生成时间戳或进行时间相关的计算
+      scheduler = kafkaScheduler, // 调度器，用于安排任务或定时任务
+      logManager = logManager, // 日志管理器
+      remoteLogManager = remoteLogManager, // 远程日志管理器
+      quotaManagers = quotaManagers, // 配额管理器
+      metadataCache = metadataCache, // 元数据缓存
+      logDirFailureChannel = logDirFailureChannel, // 日志目录故障通道，用于处理日志目录的故障
+      alterPartitionManager = alterPartitionManager, // 修改分区管理器
+      brokerTopicStats = brokerTopicStats, // broker topic 统计信息
       isShuttingDown = isShuttingDown,
-      zkClient = Some(zkClient),
-      threadNamePrefix = threadNamePrefix,
-      brokerEpochSupplier = brokerEpochSupplier)
+      zkClient = Some(zkClient), // zk客户端
+      threadNamePrefix = threadNamePrefix, // 线程前缀
+      brokerEpochSupplier = brokerEpochSupplier) // 用于获取broker的epoch
   }
 
   private def initZkClient(time: Time): Unit = {

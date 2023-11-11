@@ -426,7 +426,7 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
 
   /**
    * Stop cleaning logs in the provided directory
-   *
+   * 当一个日志目录出现问题时，会停止对该目录的日志清理，并从检查点列表中移除该目录。
    * @param dir     the absolute path of the log dir
    */
   def handleLogDirFailure(dir: String): Unit = {

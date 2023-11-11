@@ -203,20 +203,20 @@ class LogManager(logDirs: Seq[File],
   def handleLogDirFailure(dir: String): Unit = {
     warn(s"Stopping serving logs in dir $dir")
     logCreationOrDeletionLock synchronized {
-      _liveLogDirs.remove(new File(dir))
-      if (_liveLogDirs.isEmpty) {
+      _liveLogDirs.remove(new File(dir)) // 从_liveLogDirs中移除出问题的目录，_liveLogDirs是一个存储当前活动日志目录的集合。
+      if (_liveLogDirs.isEmpty) { // 当前活动的日志全部失败，遇到致命错误，关闭broker
         fatal(s"Shutdown broker because all log dirs in ${logDirs.mkString(", ")} have failed")
         Exit.halt(1)
       }
 
-      recoveryPointCheckpoints = recoveryPointCheckpoints.filter { case (file, _) => file.getAbsolutePath != dir }
-      logStartOffsetCheckpoints = logStartOffsetCheckpoints.filter { case (file, _) => file.getAbsolutePath != dir }
+      recoveryPointCheckpoints = recoveryPointCheckpoints.filter { case (file, _) => file.getAbsolutePath != dir } // 从恢复点移除出问题的目录
+      logStartOffsetCheckpoints = logStartOffsetCheckpoints.filter { case (file, _) => file.getAbsolutePath != dir } // 从日志开始偏移量的检查点中移除出问题的目录
       if (cleaner != null)
-        cleaner.handleLogDirFailure(dir)
+        cleaner.handleLogDirFailure(dir) // 如果cleaner存在，则停止对该目录的清理，并从检查点移除
 
       def removeOfflineLogs(logs: Pool[TopicPartition, UnifiedLog]): Iterable[TopicPartition] = {
         val offlineTopicPartitions: Iterable[TopicPartition] = logs.collect {
-          case (tp, log) if log.parentDir == dir => tp
+          case (tp, log) if log.parentDir == dir => tp // 条件是每个主题分区的日志的父目录与给定的目录dir相同
         }
         offlineTopicPartitions.foreach { topicPartition => {
           val removedLog = removeLogAndMetrics(logs, topicPartition)
@@ -228,12 +228,12 @@ class LogManager(logDirs: Seq[File],
         offlineTopicPartitions
       }
 
-      val offlineCurrentTopicPartitions = removeOfflineLogs(currentLogs)
+      val offlineCurrentTopicPartitions = removeOfflineLogs(currentLogs) // 获取离线分区
       val offlineFutureTopicPartitions = removeOfflineLogs(futureLogs)
 
       warn(s"Logs for partitions ${offlineCurrentTopicPartitions.mkString(",")} are offline and " +
            s"logs for future partitions ${offlineFutureTopicPartitions.mkString(",")} are offline due to failure on log directory $dir")
-      dirLocks.filter(_.file.getParent == dir).foreach(dir => CoreUtils.swallow(dir.destroy(), this))
+      dirLocks.filter(_.file.getParent == dir).foreach(dir => CoreUtils.swallow(dir.destroy(), this)) // 解锁
     }
   }
 
@@ -627,7 +627,7 @@ class LogManager(logDirs: Seq[File],
           debug(s"Updating log start offsets at $dir")
           checkpointLogStartOffsetsInDir(dir, logs)
 
-          // mark that the shutdown was clean by creating marker file
+          // mark that the shutdown was clean by creating marker file 创建标志文件
           debug(s"Writing clean shutdown marker at $dir")
           CoreUtils.swallow(Files.createFile(new File(dir, LogLoader.CleanShutdownFile).toPath), this)
         }
@@ -1305,6 +1305,7 @@ class LogManager(logDirs: Seq[File],
   }
 
   // logDir should be an absolute path
+  // 检查给定的日志目录是否被标记为在线
   def isLogDirOnline(logDir: String): Boolean = {
     // The logDir should be an absolute path
     if (!logDirs.exists(_.getAbsolutePath == logDir))

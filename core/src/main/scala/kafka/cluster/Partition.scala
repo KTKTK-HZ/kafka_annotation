@@ -1147,11 +1147,11 @@ class Partition(val topicPartition: TopicPartition,
 
   def maybeShrinkIsr(): Unit = {
     def needsIsrUpdate: Boolean = {
-      !partitionState.isInflight && inReadLock(leaderIsrUpdateLock) {
+      !partitionState.isInflight && inReadLock(leaderIsrUpdateLock) { // Inflight表示副本同步状态正在进行中，或者正在重平衡
         needsShrinkIsr()
       }
     }
-    // 判断是否需要执行ISR收缩
+    // 执行ISR收缩
     if (needsIsrUpdate) {
       val alterIsrUpdateOpt = inWriteLock(leaderIsrUpdateLock) {
         leaderLogIfLocal.flatMap { leaderLog =>
@@ -1169,7 +1169,7 @@ class Partition(val topicPartition: TopicPartition,
                 s"Leader: (highWatermark: ${leaderLog.highWatermark}, " +
                 s"endOffset: ${leaderLog.logEndOffset}). " +
                 s"Out of sync replicas: $outOfSyncReplicaLog.")
-              Some(prepareIsrShrink(currentState, outOfSyncReplicaIds))
+              Some(prepareIsrShrink(currentState, outOfSyncReplicaIds)) // 真正执行缩小isr的操作
             case _ =>
               None
           }

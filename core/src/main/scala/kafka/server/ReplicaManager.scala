@@ -224,7 +224,7 @@ class ReplicaManager(val config: KafkaConfig, // kafka配置管理类
   protected val localBrokerId = config.brokerId
   // ReplicaManager实例通过allPartitions维护所在broker上的所有副本
   protected val allPartitions = new Pool[TopicPartition, HostedPartition](
-    valueFactory = Some(tp => HostedPartition.Online(Partition(tp, time, this)))
+    valueFactory = Some(tp => HostedPartition.Online(Partition(tp, time, this))) // kafka中partition是实际存储，而topicPartition是对其的封装
   )
   protected val replicaStateChangeLock = new Object
   // replicaFetcherManager负责管理所有副本同步线程
@@ -1364,14 +1364,16 @@ class ReplicaManager(val config: KafkaConfig, // kafka配置管理类
       }
 
       val response = {
+        // 如果LeaderAndIsrRequest携带的Controller Epoch小于当前Controller的Epoch值,返回异常表明controller易主
         if (leaderAndIsrRequest.controllerEpoch < controllerEpoch) {
           stateChangeLogger.warn(s"Ignoring LeaderAndIsr request from controller $controllerId with " +
             s"correlation id $correlationId since its controller epoch ${leaderAndIsrRequest.controllerEpoch} is old. " +
             s"Latest known controller epoch is $controllerEpoch")
+          // 说明Controller已经易主，抛出相应异常
           leaderAndIsrRequest.getErrorResponse(0, Errors.STALE_CONTROLLER_EPOCH.exception)
         } else {
           val responseMap = new mutable.HashMap[TopicPartition, Errors]
-          controllerEpoch = leaderAndIsrRequest.controllerEpoch
+          controllerEpoch = leaderAndIsrRequest.controllerEpoch // 更新controllerEpoch的值
 
           val partitions = new mutable.HashSet[Partition]()
           val partitionsToBeLeader = new mutable.HashMap[Partition, LeaderAndIsrPartitionState]()
@@ -1379,20 +1381,23 @@ class ReplicaManager(val config: KafkaConfig, // kafka配置管理类
           val topicIdUpdateFollowerPartitions = new mutable.HashSet[Partition]()
 
           // First create the partition if it doesn't exist already
-          requestPartitionStates.foreach { partitionState =>
+          //becomeLeaderOrFollower方法的第一部分代码，主要做的事情就是创建新分区、更新Controller Epoch和校验分区Leader Epoch。
+          requestPartitionStates.foreach { partitionState => // 遍历LeaderAndIsrRequest请求中的所有分区
             val topicPartition = new TopicPartition(partitionState.topicName, partitionState.partitionIndex)
+            // 从allPartitions中获取对应分区对象
             val partitionOpt = getPartition(topicPartition) match {
               case HostedPartition.Offline =>
                 stateChangeLogger.warn(s"Ignoring LeaderAndIsr request from " +
                   s"controller $controllerId with correlation id $correlationId " +
                   s"epoch $controllerEpoch for partition $topicPartition as the local replica for the " +
                   "partition is in an offline log directory")
+                // 添加对象异常到Response，并设置分区对象变量partitionOpt=None
                 responseMap.put(topicPartition, Errors.KAFKA_STORAGE_ERROR)
                 None
 
               case HostedPartition.Online(partition) =>
                 Some(partition)
-
+              // 如果检查分区对象不存在，则创建分区对象，加入到allPartition中
               case HostedPartition.None =>
                 val partition = Partition(topicPartition, time, this)
                 allPartitions.putIfNotExists(topicPartition, HostedPartition.Online(partition))
@@ -1400,6 +1405,7 @@ class ReplicaManager(val config: KafkaConfig, // kafka配置管理类
             }
 
             // Next check the topic ID and the partition's leader epoch
+            // 检查leaderEpoch
             partitionOpt.foreach { partition =>
               val currentLeaderEpoch = partition.getLeaderEpoch
               val requestLeaderEpoch = partitionState.leaderEpoch
@@ -1416,10 +1422,10 @@ class ReplicaManager(val config: KafkaConfig, // kafka配置管理类
                 // This is useful while updating the isr to maintain the decision maker controller's epoch in the zookeeper path
                 if (partitionState.replicas.contains(localBrokerId)) {
                   partitions += partition
-                  if (partitionState.leader == localBrokerId) {
+                  if (partitionState.leader == localBrokerId) { // 确定broker上副本是哪些分区的leader副本
                     partitionsToBeLeader.put(partition, partitionState)
                   } else {
-                    partitionsToBeFollower.put(partition, partitionState)
+                    partitionsToBeFollower.put(partition, partitionState) // 确定broker上副本是哪些分区的follower副本
                   }
                 } else {
                   stateChangeLogger.warn(s"Ignoring LeaderAndIsr request from controller $controllerId with " +
@@ -1466,16 +1472,16 @@ class ReplicaManager(val config: KafkaConfig, // kafka配置管理类
               }
             }
           }
-
+          // becomeLeaderOrFollower方法进入到第2部分，开始执行Broker成为Leader副本和Follower副本的逻辑
           val highWatermarkCheckpoints = new LazyOffsetCheckpoints(this.highWatermarkCheckpoints)
           val partitionsBecomeLeader = if (partitionsToBeLeader.nonEmpty)
             makeLeaders(controllerId, controllerEpoch, partitionsToBeLeader, correlationId, responseMap,
-              highWatermarkCheckpoints, topicIdFromRequest)
+              highWatermarkCheckpoints, topicIdFromRequest) // 执行makeLeaders的逻辑
           else
             Set.empty[Partition]
           val partitionsBecomeFollower = if (partitionsToBeFollower.nonEmpty)
             makeFollowers(controllerId, controllerEpoch, partitionsToBeFollower, correlationId, responseMap,
-              highWatermarkCheckpoints, topicIdFromRequest)
+              highWatermarkCheckpoints, topicIdFromRequest) // 执行makeFollower的逻辑
           else
             Set.empty[Partition]
 
@@ -1487,12 +1493,15 @@ class ReplicaManager(val config: KafkaConfig, // kafka配置管理类
 
           // We initialize highwatermark thread after the first LeaderAndIsr request. This ensures that all the partitions
           // have been completely populated before starting the checkpointing there by avoiding weird race conditions
+          // 启动高水位检查点专属线程
+          // 定期将Broker上所有非Offline分区的高水位值写入到检查点文件
           startHighWatermarkCheckPointThread()
-
+          // 添加日志路径数据迁移线程
           maybeAddLogDirFetchers(partitions, highWatermarkCheckpoints, topicIdFromRequest)
-
+          // 关闭空闲副本拉取线程
           replicaFetcherManager.shutdownIdleFetcherThreads()
-          replicaAlterLogDirsManager.shutdownIdleFetcherThreads()
+          replicaAlterLogDirsManager.shutdownIdleFetcherThreads() // 关闭空闲日志路径数据迁移线程
+          // 执行Leader变更之后的回调逻辑，这里的回调逻辑，实际上只是对Kafka两个内部主题（consumer_offsets和transaction_state）有用
           onLeadershipChange(partitionsBecomeLeader, partitionsBecomeFollower)
 
           val data = new LeaderAndIsrResponseData().setErrorCode(Errors.NONE.code)
@@ -1516,7 +1525,7 @@ class ReplicaManager(val config: KafkaConfig, // kafka配置管理类
                 .setErrorCode(error.code))
             }
           }
-          new LeaderAndIsrResponse(data, leaderAndIsrRequest.version)
+          new LeaderAndIsrResponse(data, leaderAndIsrRequest.version) // 构造LeaderAndIsrRequest请求的Response并返回
         }
       }
       val endMs = time.milliseconds()
@@ -1605,12 +1614,12 @@ class ReplicaManager(val config: KafkaConfig, // kafka配置管理类
    *
    *  TODO: the above may need to be fixed later
    */
-  private def makeLeaders(controllerId: Int,
-                          controllerEpoch: Int,
-                          partitionStates: Map[Partition, LeaderAndIsrPartitionState],
-                          correlationId: Int,
-                          responseMap: mutable.Map[TopicPartition, Errors],
-                          highWatermarkCheckpoints: OffsetCheckpoints,
+  private def makeLeaders(controllerId: Int, // Controller所在Broker的ID
+                          controllerEpoch: Int, // Controller Epoch值，可以认为是Controller版本号
+                          partitionStates: Map[Partition, LeaderAndIsrPartitionState], // LeaderAndIsrRequest请求中携带的分区信息，partitionsToBeLeader中的区分
+                          correlationId: Int, // 请求的Correlation字段，只用于日志调试
+                          responseMap: mutable.Map[TopicPartition, Errors], // 按照主题分区分组的异常错误集合
+                          highWatermarkCheckpoints: OffsetCheckpoints,  // 操作磁盘上高水位检查点文件的工具类
                           topicIds: String => Option[Uuid]): Set[Partition] = {
     val traceEnabled = stateChangeLogger.isTraceEnabled
     partitionStates.keys.foreach { partition =>
@@ -1706,9 +1715,9 @@ class ReplicaManager(val config: KafkaConfig, // kafka配置管理类
     val partitionsToMakeFollower: mutable.Set[Partition] = mutable.Set()
     try {
       partitionStates.forKeyValue { (partition, partitionState) =>
-        val newLeaderBrokerId = partitionState.leader
+        val newLeaderBrokerId = partitionState.leader // 拿到分区的Leader Broker ID
         try {
-          if (metadataCache.hasAliveBroker(newLeaderBrokerId)) {
+          if (metadataCache.hasAliveBroker(newLeaderBrokerId)) { // 在元数据缓存中找到Leader Broke对象
             // Only change partition state when the leader is available
             if (partition.makeFollower(partitionState, highWatermarkCheckpoints, topicIds(partitionState.topicName))) {
               partitionsToMakeFollower += partition

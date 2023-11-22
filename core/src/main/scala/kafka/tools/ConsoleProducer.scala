@@ -39,6 +39,7 @@ import scala.annotation.nowarn
 object ConsoleProducer extends Logging {
 
   private[tools] def newReader(className: String, prop: Properties): RecordReader = {
+    // Class.forName(className)用于加载类，getDeclaredConstructor()获取该类的默认构造函数，newInstance()调用该构造函数创建新的实例
     val reader = Class.forName(className).getDeclaredConstructor().newInstance()
     reader match {
       case r: RecordReader =>

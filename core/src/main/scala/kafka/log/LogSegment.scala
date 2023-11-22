@@ -441,7 +441,7 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
    * Truncate off all index and log entries with offsets >= the given offset.
    * If the given offset is larger than the largest message in this segment, do nothing.
    * @param offset The offset to truncate to
-   * @return The number of log bytes truncated
+   * @return The number of log bytes truncated 截断的日志字节数
    */
   @nonthreadsafe
   def truncateTo(offset: Long): Int = {

@@ -583,10 +583,13 @@ class LocalLog(@volatile private var _dir: File, // 日志所在的文件夹路�
    * @return the list of segments that were scheduled for deletion
    */
   private[log] def truncateTo(targetOffset: Long): Iterable[LogSegment] = {
+    // 通过 segments.filter筛选出所有 baseOffset 大于 targetOffset 的 LogSegment，并将这些 LogSegment 添加到 deletableSegments 列表中
     val deletableSegments = List[LogSegment]() ++ segments.filter(segment => segment.baseOffset > targetOffset)
+    // 将这些筛选出来的 LogSegment 从物理磁盘上删除。其中，asyncDelete 参数表示异步删除，即不会立即删除这些 LogSegment，而是将这些删除操作放入到一个队列中，由 Kafka 服务器在后台执行。
     removeAndDeleteSegments(deletableSegments, asyncDelete = true, LogTruncation(this))
+    // 对当前的 activeSegment 调用 truncateTo(targetOffset) 进行截断操作，使得 activeSegment 的结束偏移量等于 targetOffset
     segments.activeSegment.truncateTo(targetOffset)
-    updateLogEndOffset(targetOffset)
+    updateLogEndOffset(targetOffset) // 更新日志的偏移量
     deletableSegments
   }
 }

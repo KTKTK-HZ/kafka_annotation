@@ -39,13 +39,16 @@ object ReplicaAssignment {
  * @param addingReplicas the replicas that are being added if there is a pending reassignment
  * @param removingReplicas the replicas that are being removed if there is a pending reassignment
  */
-case class ReplicaAssignment private (replicas: Seq[Int],
+case class ReplicaAssignment private (replicas: Seq[Int], // 分配给分区的broker集合
                                       addingReplicas: Seq[Int],
                                       removingReplicas: Seq[Int]) {
 
+  // addingReplicas:即将被添加到分区中的broker集合。当有新的broker加入Kafka集群时，这些broker会被添加到现有的分区中
+  // removingReplicas:即将从分区中移除的broker集合。当有broker从Kafka集群中移除或失效时，这些broker会从现有的分区中移除
   lazy val originReplicas: Seq[Int] = replicas.diff(addingReplicas)
   lazy val targetReplicas: Seq[Int] = replicas.diff(removingReplicas)
 
+  // 检查是否有broker正在被重新分配（即，是否有新的broker正在被添加或现有的broker正在被移除）
   def isBeingReassigned: Boolean = {
     addingReplicas.nonEmpty || removingReplicas.nonEmpty
   }
@@ -491,11 +494,11 @@ class ControllerContext extends ControllerChannelContext {
     }.keySet
   }
 
-  def topicName(topicId: Uuid): Option[String] = {
+  def topicName(topicId: Uuid): Option[String] = { // 通过topicId获取topicName
     topicNames.get(topicId)
   }
 
-  def clearPartitionLeadershipInfo(): Unit = partitionLeadershipInfo.clear()
+  def clearPartitionLeadershipInfo(): Unit = partitionLeadershipInfo.clear() // 清理每个分区的leader和ISR信息
 
   def partitionWithLeadersCount: Int = partitionLeadershipInfo.size
 
@@ -540,8 +543,13 @@ class ControllerContext extends ControllerChannelContext {
       leadershipInfo.leaderAndIsr.leader == preferredReplica
   }
 
+  /**
+   * 在 Kafka 中，一个副本可以处于不同的状态。
+   * isValidPartitionStateTransition 方法用于验证从当前状态到目标状态是否是有效的转换。
+   * */
   private def isValidReplicaStateTransition(replica: PartitionAndReplica, targetState: ReplicaState): Boolean =
     targetState.validPreviousStates.contains(replicaStates(replica))
+
 
   private def isValidPartitionStateTransition(partition: TopicPartition, targetState: PartitionState): Boolean =
     targetState.validPreviousStates.contains(partitionStates(partition))

@@ -62,16 +62,13 @@ import scala.util.{Failure, Success, Try}
  * 新Controller所在的Broker调用状态机的startup方法启动它们
  * */
 
-sealed trait ElectionTrigger
-final case object AutoTriggered extends ElectionTrigger
-final case object ZkTriggered extends ElectionTrigger
-final case object AdminClientTriggered extends ElectionTrigger
+
 
 object KafkaController extends Logging {
   val InitialControllerEpoch = 0
   val InitialControllerEpochZkVersion = 0
 
-  type ElectLeadersCallback = Map[TopicPartition, Either[ApiError, Int]] => Unit
+  type ElectLeadersCallback = Map[TopicPartition, Either[ApiError, Int]] => Unit // 使用type定义了一个选举新领导者时回调函数的类型
   type ListReassignmentsCallback = Either[Map[TopicPartition, ReplicaAssignment], ApiError] => Unit
   type AlterReassignmentsCallback = Either[Map[TopicPartition, ApiError], ApiError] => Unit
   type UpdateFeaturesCallback = Either[ApiError, Map[String, ApiError]] => Unit

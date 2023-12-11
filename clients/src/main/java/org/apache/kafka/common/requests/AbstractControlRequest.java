@@ -24,10 +24,10 @@ public abstract class AbstractControlRequest extends AbstractRequest {
     public static final long UNKNOWN_BROKER_EPOCH = -1L;
 
     public static abstract class Builder<T extends AbstractRequest> extends AbstractRequest.Builder<T> {
-        protected final int controllerId;
-        protected final int controllerEpoch;
-        protected final long brokerEpoch;
-        protected final boolean kraftController;
+        protected final int controllerId; // Controller所在的Broker ID
+        protected final int controllerEpoch; // Controller的版本信息
+        protected final long brokerEpoch; // 目标Broker的Epoch
+        protected final boolean kraftController; // 是否使用Kraft
 
         protected Builder(ApiKeys api, short version, int controllerId, int controllerEpoch, long brokerEpoch) {
             this(api, version, controllerId, controllerEpoch, brokerEpoch, false);

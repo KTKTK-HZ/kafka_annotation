@@ -305,7 +305,7 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
   @threadsafe
   def read(startOffset: Long, // 要读取的第一条信息的偏移量
            maxSize: Int, // 能读取的最大字节数
-           maxPosition: Long = size, // 能读到的最大文件文职
+           maxPosition: Long = size, // 能读到的最大文件位置
            minOneMessage: Boolean = false /*是否允许在消息过大时至少返回第一条消息*/): FetchDataInfo = {
     if (maxSize < 0)
       throw new IllegalArgumentException(s"Invalid max size $maxSize for log read from segment $log")

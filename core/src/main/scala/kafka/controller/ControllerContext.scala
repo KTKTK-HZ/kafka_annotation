@@ -486,9 +486,10 @@ class ControllerContext extends ControllerChannelContext {
     }.keySet
   }
 
+  // 获取给定broker上所有的leader分区
   def partitionLeadersOnBroker(brokerId: Int): Set[TopicPartition] = {
     partitionLeadershipInfo.filter { case (topicPartition, leaderIsrAndControllerEpoch) =>
-      !isTopicQueuedUpForDeletion(topicPartition.topic) &&
+      !isTopicQueuedUpForDeletion(topicPartition.topic) && // 检查给定的分区主题是否正在被删除
         leaderIsrAndControllerEpoch.leaderAndIsr.leader == brokerId &&
         partitionReplicaAssignment(topicPartition).size > 1
     }.keySet

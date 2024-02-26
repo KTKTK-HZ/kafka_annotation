@@ -490,7 +490,7 @@ public abstract class AbstractIndex implements Closeable {
      */
     private int indexSlotRangeFor(ByteBuffer idx, long target, IndexSearchType searchEntity,
                                   SearchResultType searchResultType) {
-        // check if the index is empty
+        // 检查索引的条目数是否为0，即索引是否为空
         if (entries == 0)
             return -1;
 

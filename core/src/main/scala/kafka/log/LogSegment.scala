@@ -462,7 +462,7 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
       rollingBasedTimestamp = None
     }
 
-    bytesSinceLastIndexEntry = 0
+    bytesSinceLastIndexEntry = 0 // 用于跟踪自上一个索引条目以来已写入的字节数。
     if (maxTimestampSoFar >= 0)
       loadLargestTimestamp()
     bytesTruncated

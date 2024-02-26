@@ -23,10 +23,11 @@ import org.apache.kafka.common.header.Header;
 /**
  * A log record is a tuple consisting of a unique offset in the log, a sequence number assigned by
  * the producer, a timestamp, a key and a value.
+ * Kafka中消息的定义
  */
 public interface Record {
 
-    Header[] EMPTY_HEADERS = new Header[0];
+    Header[] EMPTY_HEADERS = new Header[0]; // 创建一个空的Header数组，用于存放一些头部信息
 
     /**
      * The offset of this record in the log
@@ -38,7 +39,7 @@ public interface Record {
      * Get the sequence number assigned by the producer.
      * @return the sequence number
      */
-    int sequence();
+    int sequence(); // 该方法用户获取生产者分配的序列号
 
     /**
      * Get the size in bytes of this record.
@@ -55,13 +56,13 @@ public interface Record {
     /**
      * Raise a {@link org.apache.kafka.common.errors.CorruptRecordException} if the record does not have a valid checksum.
      */
-    void ensureValid();
+    void ensureValid(); // 该方法用于检测记录的校验和是否有效。
 
     /**
      * Get the size in bytes of the key.
      * @return the size of the key, or -1 if there is no key
      */
-    int keySize();
+    int keySize(); // 获取键的字节大小
 
     /**
      * Check whether this record has a key
@@ -73,7 +74,7 @@ public interface Record {
      * Get the record's key.
      * @return the key or null if there is none
      */
-    ByteBuffer key();
+    ByteBuffer key(); // 获取Record的键
 
     /**
      * Get the size in bytes of the value.

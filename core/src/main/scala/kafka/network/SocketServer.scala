@@ -593,7 +593,7 @@ private[kafka] abstract class Acceptor(val socketServer: SocketServer, // Socket
 
   private val sendBufferSize = config.socketSendBufferBytes // 出站网络I/O的底层缓冲区大小。该值默认是Broker端参数socket.send.buffer.bytes的值，即100KB
   private val recvBufferSize = config.socketReceiveBufferBytes // 入站网络I/O的底层缓冲区大小。该值默认是Broker端参数socket.receive.buffer.bytes的值，即100KB
-  private val listenBacklogSize = config.socketListenBacklogSize
+  private val listenBacklogSize = config.socketListenBacklogSize // 新的网络连接请求排队等待的队列长度
   // 创建底层的NIO Selector对象
   // Selector对象负责执行底层实际I/O操作，如监听连接创建请求、读写请求等
   private val nioSelector = NSelector.open()
@@ -608,7 +608,7 @@ private[kafka] abstract class Acceptor(val socketServer: SocketServer, // Socket
   private[network] val localPort: Int  = if (endPoint.port != 0) {
     endPoint.port
   } else {
-    // Broker端创建对应的ServerSocketChannel实例，后续把该Channel向上一步的Selector种注册
+    // Broker端创建对应的ServerSocketChannel实例，后续把该Channel向上一步的Selector中注册
     serverChannel = openServerSocket(endPoint.host, endPoint.port, listenBacklogSize)
     val newPort = serverChannel.socket().getLocalPort()
     info(s"Opened wildcard endpoint ${endPoint.host}:${newPort}")
@@ -853,6 +853,7 @@ private[kafka] abstract class Acceptor(val socketServer: SocketServer, // Socket
    */
   def wakeup(): Unit = nioSelector.wakeup()
 
+  // 创建一定数量的processor，并将它们添加到集合中，如果它们所属的上下文已经启动，则可以立即启动这些线程。
   def addProcessors(toCreate: Int): Unit = synchronized {
     val listenerName = endPoint.listenerName // 监听名
     val securityProtocol = endPoint.securityProtocol // 安全协议

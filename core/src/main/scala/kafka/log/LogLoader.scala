@@ -234,7 +234,7 @@ class LogLoader(
         debug(s"Deleting stray temporary file ${file.getAbsolutePath}")
         Files.deleteIfExists(file.toPath)
       } else if (filename.endsWith(CleanedFileSuffix)) {
-        minCleanedFileOffset = Math.min(offsetFromFile(file), minCleanedFileOffset)
+        minCleanedFileOffset = Math.min(offsetFromFile(file), minCleanedFileOffset) // 选取文件名中位移值最小的.cleaned文件，获取其位移值，并将该文件加入待删除文件集合中
         cleanedFiles += file
       } else if (filename.endsWith(SwapFileSuffix)) {
         swapFiles += file

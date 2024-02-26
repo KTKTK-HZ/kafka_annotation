@@ -522,6 +522,7 @@ public class FileRecords extends AbstractRecords implements Closeable {
     public static class TimestampAndOffset {
         public final long timestamp;
         public final long offset;
+        // 使用 Optional 的主要目的是为了明确地表示一个值可能不存在，并提供一种更优雅的方式来处理这种情况，而不是简单地使用null。
         public final Optional<Integer> leaderEpoch;
 
         public TimestampAndOffset(long timestamp, long offset, Optional<Integer> leaderEpoch) {

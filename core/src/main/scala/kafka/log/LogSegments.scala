@@ -262,6 +262,7 @@ object LogSegments {
   def sizeInBytes(segments: Iterable[LogSegment]): Long =
     segments.map(_.size.toLong).sum
 
+  // 获取每个logSegment第一个batch的时间戳
   def getFirstBatchTimestampForSegments(segments: Iterable[LogSegment]): Iterable[Long] = {
     segments.map {
       segment =>

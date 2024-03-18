@@ -27,6 +27,7 @@ trait Timer {
   /**
     * Add a new task to this executor. It will be executed after the task's delay
     * (beginning from the time of submission)
+    * 将给定的定时任务插入时间轮上，等待后续延迟执行
     * @param timerTask the task to add
     */
   def add(timerTask: TimerTask): Unit
@@ -34,6 +35,7 @@ trait Timer {
   /**
     * Advance the internal clock, executing any tasks whose expiration has been
     * reached within the duration of the passed timeout.
+    * 向前推进时钟，执行已达过期时间的延迟任务
     * @param timeoutMs
     * @return whether or not any tasks were executed
     */
@@ -41,12 +43,14 @@ trait Timer {
 
   /**
     * Get the number of tasks pending execution
+    * 获取时间轮上延时任务数量
     * @return the number of tasks
     */
   def size: Int
 
   /**
     * Shutdown the timer service, leaving pending tasks unexecuted
+    * 关闭定时器
     */
   def shutdown(): Unit
 }
@@ -57,10 +61,10 @@ class SystemTimer(executorName: String,
                   wheelSize: Int = 20,
                   startMs: Long = Time.SYSTEM.hiResClockMs) extends Timer {
 
-  // timeout timer
+  // 单线程的线程池用于异步执行定时任务
   private[this] val taskExecutor = Executors.newFixedThreadPool(1,
     (runnable: Runnable) => KafkaThread.nonDaemon("executor-" + executorName, runnable))
-
+  // 延迟队列保存所有Bucket，即所有TimerTaskList对象
   private[this] val delayQueue = new DelayQueue[TimerTaskList]()
   private[this] val taskCounter = new AtomicInteger(0)
   private[this] val timingWheel = new TimingWheel(
@@ -116,10 +120,11 @@ class SystemTimer(executorName: String,
     }
   }
 
+  // 获取时间轮上延时任务数量，注意 taskCounter是AtomicInteger类型，所以需要get方法获取值
   def size: Int = taskCounter.get
 
   override def shutdown(): Unit = {
-    taskExecutor.shutdown()
+    taskExecutor.shutdown() // 关闭线程池
   }
 
 }

@@ -286,6 +286,7 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
    */
   @threadsafe
   private[log] def translateOffset(offset: Long, startingFilePosition: Int = 0): LogOffsetPosition = {
+    // 如果给定了startingFilePosition，就从该位置开始搜索
     val mapping = offsetIndex.lookup(offset) // 获取给定offset对应的OffsetPosition，其是保存offset和其对应物理位置的POJO
     log.searchForOffsetWithSize(offset, max(mapping.position, startingFilePosition))
   }

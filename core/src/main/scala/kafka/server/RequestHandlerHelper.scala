@@ -121,6 +121,7 @@ class RequestHandlerHelper(
     requestChannel.sendResponse(request, response, None)
   }
 
+  // 发送普通Response但接受限流的约束
   def sendResponseMaybeThrottle(request: RequestChannel.Request,
                                 createResponse: Int => AbstractResponse): Unit = {
     val throttleTimeMs = maybeRecordAndGetThrottleTimeMs(request)
@@ -130,6 +131,7 @@ class RequestHandlerHelper(
     requestChannel.sendResponse(request, createResponse(throttleTimeMs), None)
   }
 
+  // 发送携带错误信息的Response但接受限流的约束
   def sendErrorResponseMaybeThrottle(request: RequestChannel.Request, error: Throwable): Unit = {
     val throttleTimeMs = maybeRecordAndGetThrottleTimeMs(request)
     // Only throttle non-forwarded requests or cluster authorization failures
@@ -168,6 +170,7 @@ class RequestHandlerHelper(
     requestChannel.sendResponse(request, createResponse(maxThrottleTimeMs), None)
   }
 
+  // 发送普通Response而不受限流限制
   def sendResponseExemptThrottle(request: RequestChannel.Request,
                                  response: AbstractResponse,
                                  onComplete: Option[Send => Unit] = None): Unit = {
@@ -175,11 +178,16 @@ class RequestHandlerHelper(
     requestChannel.sendResponse(request, response, onComplete)
   }
 
+
   def sendErrorResponseExemptThrottle(request: RequestChannel.Request, error: Throwable): Unit = {
     quotas.request.maybeRecordExempt(request)
     sendErrorOrCloseConnection(request, error, 0)
   }
 
+  /**
+   * 发送NoOpResponse类型的Response而不受请求通道上限流（throttling）的限制。
+   * 所谓的NoOpResponse，是指Processor线程取出该类型的Response后，不执行真正的I/O发送操作。
+   * */
   def sendNoOpResponseExemptThrottle(request: RequestChannel.Request): Unit = {
     quotas.request.maybeRecordExempt(request)
     requestChannel.sendNoOpResponse(request)

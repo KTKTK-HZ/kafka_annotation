@@ -456,7 +456,7 @@ class RequestChannel(val queueSize: Int,
       // For a given request, these may happen in addition to one in the previous section, skip updating the metrics
       case _: StartThrottlingResponse | _: EndThrottlingResponse => ()
     }
-    // 找出response对应的Processor线程，即request当初是由哪个Processor线程处理的
+     找出response对应的Processor线程，即request当初是由哪个Processor线程处理的
     val processor = processors.get(response.processor)
     // The processor may be null if it was shutdown. In this case, the connections
     // are closed, so the response is dropped.

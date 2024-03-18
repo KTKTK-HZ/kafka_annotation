@@ -1235,10 +1235,10 @@ class LogManager(logDirs: Seq[File],
 
     // clean current logs.
     val deletableLogs = {
-      if (cleaner != null) {
+      if (cleaner != null) { // 如果 cleaner 已经初始化
         // prevent cleaner from working on same partitions when changing cleanup policy
         cleaner.pauseCleaningForNonCompactedPartitions()
-      } else {
+      } else { // 如果 cleaner 还没有初始化，则先筛选出压缩模式不等于 compact 的log
         currentLogs.filter {
           case (_, log) => !log.config.compact
         }

@@ -691,17 +691,21 @@ class LogSegment private[log] (val log: FileRecords, // 实际保存kafka消息�
 }
 
 object LogSegment {
-
+  // 创建 LogSegment
   def open(dir: File, baseOffset: Long, config: LogConfig, time: Time, fileAlreadyExists: Boolean = false,
            initFileSize: Int = 0, preallocate: Boolean = false, fileSuffix: String = ""): LogSegment = {
     val maxIndexSize = config.maxIndexSize
     new LogSegment(
+      // 创建FileChannel，对应.log文件
       FileRecords.open(UnifiedLog.logFile(dir, baseOffset, fileSuffix), fileAlreadyExists, initFileSize, preallocate),
+      // 创建.index文件对应的 mmap
       LazyIndex.forOffset(UnifiedLog.offsetIndexFile(dir, baseOffset, fileSuffix), baseOffset, maxIndexSize),
+      // 创建.timeindex文件对应的 mmap
       LazyIndex.forTime(UnifiedLog.timeIndexFile(dir, baseOffset, fileSuffix), baseOffset, maxIndexSize),
+      // 创建事务所以文件
       new TransactionIndex(baseOffset, UnifiedLog.transactionIndexFile(dir, baseOffset, fileSuffix)),
       baseOffset,
-      indexIntervalBytes = config.indexInterval,
+      indexIntervalBytes = config.indexInterval, //默认4KB，即4KB的消息建一条索引
       rollJitterMs = config.randomSegmentJitter,
       time)
   }

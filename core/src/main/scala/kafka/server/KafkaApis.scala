@@ -581,10 +581,10 @@ class KafkaApis(val requestChannel: RequestChannel, // 请求通道
     val nonExistingTopicResponses = mutable.Map[TopicPartition, PartitionResponse]()
     val invalidRequestResponses = mutable.Map[TopicPartition, PartitionResponse]()
     val authorizedRequestInfo = mutable.Map[TopicPartition, MemoryRecords]()
-    // cache the result to avoid redundant authorization calls
+    // 缓存有权限的topic名，避免多余的鉴权调用
     val authorizedTopics = authHelper.filterByAuthorized(request.context, WRITE, TOPIC,
       produceRequest.data().topicData().asScala)(_.name())
-
+    // 下面使用的两个 foreach 相当于两个 for 循环，主要是将每个topic和存储其数据的memoryRecords放入authorizedRequestInfo中
     produceRequest.data.topicData.forEach(topic => topic.partitionData.forEach { partition =>
       val topicPartition = new TopicPartition(topic.name, partition.index)
       // This caller assumes the type is MemoryRecords and that is true on current serialization

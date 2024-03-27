@@ -18,6 +18,7 @@ package org.apache.kafka.common.requests;
 
 import org.apache.kafka.common.protocol.ApiMessage;
 
+// AbstractRequest 与 AbstractResponse均需实现的接口
 public interface AbstractRequestResponse {
 
     ApiMessage data();

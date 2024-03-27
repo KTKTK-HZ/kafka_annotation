@@ -90,9 +90,9 @@ public final class LogFileUtils {
      */
     private static String filenamePrefixFromOffset(long offset) {
         NumberFormat nf = NumberFormat.getInstance();
-        nf.setMinimumIntegerDigits(20);
-        nf.setMaximumFractionDigits(0);
-        nf.setGroupingUsed(false);
+        nf.setMinimumIntegerDigits(20); // 设置最小位数为 20
+        nf.setMaximumFractionDigits(0); // 设置小数位数的最大值为0，这表示结果字符串不会有小数部分
+        nf.setGroupingUsed(false); // 不使用分组分隔符（例如，在一些国家，数字分组符是逗号,，像1,000表示千）
         return nf.format(offset);
     }
 

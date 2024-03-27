@@ -27,6 +27,7 @@ import org.apache.kafka.common.utils.AppInfoParser;
 
 import java.nio.ByteBuffer;
 
+// ApiVersionsRequest主要用来查询 Kafka broker 支持的 API 版本信息
 public class ApiVersionsRequest extends AbstractRequest {
 
     public static class Builder extends AbstractRequest.Builder<ApiVersionsRequest> {

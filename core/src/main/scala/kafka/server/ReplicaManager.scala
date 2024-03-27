@@ -620,13 +620,13 @@ class ReplicaManager(val config: KafkaConfig, // kafka配置管理类
   def appendRecords(timeout: Long,
                     requiredAcks: Short,
                     internalTopicsAllowed: Boolean,
-                    origin: AppendOrigin,
+                    origin: AppendOrigin, // 消息的来源
                     entriesPerPartition: Map[TopicPartition, MemoryRecords],
                     responseCallback: Map[TopicPartition, PartitionResponse] => Unit,
                     delayedProduceLock: Option[Lock] = None,
                     recordConversionStatsCallback: Map[TopicPartition, RecordConversionStats] => Unit = _ => (),
                     requestLocal: RequestLocal = RequestLocal.NoCaching): Unit = {
-    if (isValidRequiredAcks(requiredAcks)) {
+    if (isValidRequiredAcks(requiredAcks)) { // 检验 acks是否为1，,0，-1这三个值之一
       val sTime = time.milliseconds
       val localProduceResults = appendToLocalLog(internalTopicsAllowed = internalTopicsAllowed,
         origin, entriesPerPartition, requiredAcks, requestLocal)
@@ -645,7 +645,7 @@ class ReplicaManager(val config: KafkaConfig, // kafka配置管理类
           )
         ) // response status
       }
-
+      // actionQueue用于收集延迟操作
       actionQueue.add {
         () =>
           localProduceResults.foreach {

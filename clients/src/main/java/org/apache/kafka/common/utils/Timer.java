@@ -56,8 +56,8 @@ public class Timer {
 
     Timer(Time time, long timeoutMs) {
         this.time = time;
-        update();
-        reset(timeoutMs);
+        update(); // 更新currentTimeMs
+        reset(timeoutMs); // 设置 deadlineMs
     }
 
     /**

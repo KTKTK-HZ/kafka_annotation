@@ -591,7 +591,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
     private final long retryBackoffMs;
     private final long requestTimeoutMs;
     private final int defaultApiTimeoutMs;
-    private volatile boolean closed = false;
+    private volatile boolean closed = false; // 多个线程可以安全地检查这个状态来决定是否继续执行或者退出执行流程
     private final List<ConsumerPartitionAssignor> assignors;
 
     // currentThread holds the threadId of the current thread accessing KafkaConsumer
@@ -1232,7 +1232,11 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
      * @param includeMetadataInTimeout 拉取消息的超时时间是否包含更新元数据的时间，默认为true
      */
     private ConsumerRecords<K, V> poll(final Timer timer, final boolean includeMetadataInTimeout) {
-        // 获取轻量级锁，并确定消费者没有关闭从而可以完成数据拉取
+        /**
+         * 获取轻量级锁，并确定消费者没有关闭从而可以完成数据拉取
+         * 消费者的消费线程是非线程安全的
+         * 在使用多线程的场景下：通过加锁的方式，确保只有一个消费者线程在调用 poll()方法，如果存在多个线程调用 poll()方法，直接抛出异常
+         * */
         acquireAndEnsureOpen();
         try {
             // 记录开始拉取消息的时间，并且更新相关的监控指标
@@ -1300,7 +1304,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
     }
 
     boolean updateAssignmentMetadataIfNeeded(final Timer timer, final boolean waitForJoinGroup) {
-        if (coordinator != null && !coordinator.poll(timer, waitForJoinGroup)) { // 如果开启了周期性偏移提交，coordinator.poll会进行处理
+        if (coordinator != null && !coordinator.poll(timer, waitForJoinGroup)) { // 如果coordinator 不为 null，则调用coordinator.poll会进行处理
             return false;
         }
 
@@ -1311,17 +1315,21 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
      * @throws KafkaException if the rebalance callback throws exception
      */
     private Fetch<K, V> pollForFetches(Timer timer) {
+        /**
+         * 获取本次拉取数据的超时时间，取用户设置的拉取时间间隔和心跳间隔中的最小值
+         * */
         long pollTimeout = coordinator == null ? timer.remainingMs() :
                 Math.min(coordinator.timeToNextPoll(timer.currentTimeMs()), timer.remainingMs());
 
         // if data is available already, return it immediately
+        // 如果有数据（数据已经被缓存），则直接返回
         final Fetch<K, V> fetch = fetcher.collectFetch();
         if (!fetch.isEmpty()) {
             return fetch;
         }
 
         // send any new fetches (won't resend pending fetches)
-        // 生成一个新的fetch异步请求
+        // 生成一个新的fetch异步请求，注意这里没有发送
         sendFetches();
 
         // We do not want to be stuck blocking in poll if we are missing some positions
@@ -2567,7 +2575,8 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
         // 获取当前线程和其线程id
         final Thread thread = Thread.currentThread(); // 返回当前线程对象的引用
         final long threadId = thread.getId(); // 返回线程标识符。线程ID是在创建线程时生成的唯一正数值。
-        /**如果线程id与currentThread不同，并且currentThread的值不等于-1（初始值，表示当前没有线程在执行），则报异常
+        /**
+         * 如果线程id与currentThread不同，并且currentThread的值不等于-1（初始值，表示当前没有线程在执行），则报异常
          * 否则则将threadId设置为currentThread
          */
         if (threadId != currentThread.get() && !currentThread.compareAndSet(NO_CURRENT_THREAD, threadId))

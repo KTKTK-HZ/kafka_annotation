@@ -269,12 +269,13 @@ public abstract class AbstractFetch<K, V> implements Closeable {
      * @throws TopicAuthorizationException If there is TopicAuthorization error in fetchResponse.
      */
     public Fetch<K, V> collectFetch() {
-        Fetch<K, V> fetch = Fetch.empty();
-        Queue<CompletedFetch<K, V>> pausedCompletedFetches = new ArrayDeque<>();
+        Fetch<K, V> fetch = Fetch.empty(); // 创建一个空的 Fetch 对象，用来存储拉取来的消息
+        Queue<CompletedFetch<K, V>> pausedCompletedFetches = new ArrayDeque<>(); // 创建一个队列，用来存储被暂停的CompletedFetches，CompletedFetches表示从 broker 拉回的一批消息
         int recordsRemaining = fetchConfig.maxPollRecords;
 
         try {
             while (recordsRemaining > 0) {
+                // 如果没有可用的nextInLineFetch或者当前的nextInLineFetch已经被消费完，则尝试从completedFetches队列中查看下一个元素，并对其进行初始化处理。
                 if (nextInLineFetch == null || nextInLineFetch.isConsumed) {
                     CompletedFetch<K, V> records = completedFetches.peek();
                     if (records == null) break;
@@ -298,12 +299,13 @@ public abstract class AbstractFetch<K, V> implements Closeable {
                     }
                     completedFetches.poll();
                 } else if (subscriptions.isPaused(nextInLineFetch.partition)) {
+                    // 如果当前分区被暂停，则将nextInLineFetch放入pausedCompletedFetches队列中，并清空nextInLineFetch
                     // when the partition is paused we add the records back to the completedFetches queue instead of draining
                     // them so that they can be returned on a subsequent poll if the partition is resumed at that time
                     log.debug("Skipping fetching records for assigned partition {} because it is paused", nextInLineFetch.partition);
                     pausedCompletedFetches.add(nextInLineFetch);
                     nextInLineFetch = null;
-                } else {
+                } else { // 调用fetchRecords方法以按要求数量获取消息，并递减recordsRemaining计数器以反映已取出的消息数。
                     Fetch<K, V> nextFetch = fetchRecords(recordsRemaining);
                     recordsRemaining -= nextFetch.numRecords();
                     fetch.add(nextFetch);

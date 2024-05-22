@@ -332,7 +332,7 @@ class LogCleaner(initialConfig: CleanerConfig,
      * Clean a log if there is a dirty log available, otherwise sleep for a bit
      */
     override def doWork(): Unit = {
-      val cleaned = tryCleanFilthiestLog()
+      val cleaned = tryCleanFilthiestLog() // 尝试清理最脏的日志分区，也就是含有大量被标记为已删除或待压缩的日志的分区
       if (!cleaned)
         pause(config.backoffMs, TimeUnit.MILLISECONDS)
 

@@ -308,8 +308,8 @@ public class RecordAccumulator {
                 final int effectivePartition;
                 /**
                  * 步骤2 获取真实的partition信息
-                 * 如果 partition == RecordMetadata.UNKNOWN_PARTITION 未分配分区器，随机选择一个分区器
-                 * 如果给定了分区器，使用给定的分区器信息步骤3
+                 * 如果 partition == RecordMetadata.UNKNOWN_PARTITION 未分配分区器，则使用StickyPartitioner
+                 * 如果给定了分区器，使用给定的分区器信息
                  */
                 if (partition == RecordMetadata.UNKNOWN_PARTITION) {
                     partitionInfo = topicInfo.builtInPartitioner.peekCurrentPartitionInfo(cluster);

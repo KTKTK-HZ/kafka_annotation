@@ -33,7 +33,7 @@ import java.util.Map;
 public interface Serializer<T> extends Closeable {
 
     /**
-     * Configure this class.
+     * Configure this class.配置当前的类
      * @param configs configs in key/value pairs
      * @param isKey whether is for key or value
      */
@@ -43,7 +43,7 @@ public interface Serializer<T> extends Closeable {
 
     /**
      * Convert {@code data} into a byte array.
-     *
+     * 执行序列化操作
      * @param topic topic associated with data
      * @param data typed data
      * @return serialized bytes

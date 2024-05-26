@@ -102,8 +102,8 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
     private final ConsumerCoordinatorMetrics sensors;
     private final SubscriptionState subscriptions;
     private final OffsetCommitCallback defaultOffsetCommitCallback;
-    private final boolean autoCommitEnabled;
-    private final int autoCommitIntervalMs;
+    private final boolean autoCommitEnabled; // 是否自动提交 offset
+    private final int autoCommitIntervalMs; // 每隔多长时间提交一次 offset
     private final ConsumerInterceptors<?, ?> interceptors;
     private final AtomicInteger pendingAsyncCommits;
 
@@ -1063,8 +1063,8 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
 
     // visible for testing
     void invokeCompletedOffsetCommitCallbacks() {
-        if (asyncCommitFenced.get()) {
-            throw new FencedInstanceIdException("Get fenced exception for group.instance.id "
+        if (asyncCommitFenced.get()) { // 如果为true，表明当前的消费者实例由于一些原因（比如重平衡操作）已经被隔离或“fenced off”
+            throw new FencedInstanceIdException("Get fenced exception for group.instance.id " // 抛出FencedInstanceIdException异常，表示当前消费者实例已不再是其所在消费者组的有效成员
                 + rebalanceConfig.groupInstanceId.orElse("unset_instance_id")
                 + ", current member.id is " + memberId());
         }
@@ -1078,13 +1078,14 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
     }
 
     public RequestFuture<Void> commitOffsetsAsync(final Map<TopicPartition, OffsetAndMetadata> offsets, final OffsetCommitCallback callback) {
-        invokeCompletedOffsetCommitCallbacks();
+        invokeCompletedOffsetCommitCallbacks(); // 触发所有已完成的偏移量提交操作的回调函数
 
         RequestFuture<Void> future = null;
         if (offsets.isEmpty()) {
             // No need to check coordinator if offsets is empty since commit of empty offsets is completed locally.
+            // 如果offsets为空，则不需要检查协调器，因为空的偏移量提交是本地完成的。
             future = doCommitOffsetsAsync(offsets, callback);
-        } else if (!coordinatorUnknownAndUnreadyAsync()) {
+        } else if (!coordinatorUnknownAndUnreadyAsync()) { // 确保coordinator在提交前就绪
             // we need to make sure coordinator is ready before committing, since
             // this is for async committing we do not try to block, but just try once to
             // clear the previous discover-coordinator future, resend, or get responses;
@@ -1103,6 +1104,7 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
             // coordinator lookup request. This is fine because the listeners will be invoked in
             // the same order that they were added. Note also that AbstractCoordinator prevents
             // multiple concurrent coordinator lookup requests.
+            // 需要先寻找coordinator
             pendingAsyncCommits.incrementAndGet();
             lookupCoordinator().addListener(new RequestFutureListener<Void>() {
                 @Override
@@ -1129,7 +1131,7 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
     }
 
     private RequestFuture<Void> doCommitOffsetsAsync(final Map<TopicPartition, OffsetAndMetadata> offsets, final OffsetCommitCallback callback) {
-        RequestFuture<Void> future = sendOffsetCommitRequest(offsets);
+        RequestFuture<Void> future = sendOffsetCommitRequest(offsets); // 发送 commitOffset 请求
         final OffsetCommitCallback cb = callback == null ? defaultOffsetCommitCallback : callback;
         future.addListener(new RequestFutureListener<Void>() {
             @Override
@@ -1220,10 +1222,10 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
 
     public void maybeAutoCommitOffsetsAsync(long now) {
         if (autoCommitEnabled) {
-            nextAutoCommitTimer.update(now);
-            if (nextAutoCommitTimer.isExpired()) {
-                nextAutoCommitTimer.reset(autoCommitIntervalMs);
-                autoCommitOffsetsAsync();
+            nextAutoCommitTimer.update(now); // 更新当前时间
+            if (nextAutoCommitTimer.isExpired()) { // 判断是否已经达到或超过了预定的自动提交偏移量的时间。如果返回true，则说明是时候进行下一次自动提交了
+                nextAutoCommitTimer.reset(autoCommitIntervalMs); // 更新下一次自动提交时间
+                autoCommitOffsetsAsync(); // 提交offset
             }
         }
     }

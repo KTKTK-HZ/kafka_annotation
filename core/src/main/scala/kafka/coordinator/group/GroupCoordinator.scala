@@ -853,6 +853,7 @@ private[group] class GroupCoordinator(
     }
   }
 
+  // 处理消费者的心跳请求
   def handleHeartbeat(groupId: String,
                       memberId: String,
                       groupInstanceId: Option[String],
@@ -1253,17 +1254,18 @@ private[group] class GroupCoordinator(
     completeAndScheduleNextExpiration(group, member, member.sessionTimeoutMs)
   }
 
+  // 完成当前心跳期望，并安排下一次的心跳到期时间
   private def completeAndScheduleNextExpiration(group: GroupMetadata, member: MemberMetadata, timeoutMs: Long): Unit = {
-    val memberKey = MemberKey(group.groupId, member.memberId)
+    val memberKey = MemberKey(group.groupId, member.memberId) // 基于群组 ID 和成员 ID创建一个 memberKey，用于在心跳监控逻辑中标识特定的成员
 
     // complete current heartbeat expectation
-    member.heartbeatSatisfied = true
-    heartbeatPurgatory.checkAndComplete(memberKey)
+    member.heartbeatSatisfied = true // 该成员的当前心跳期望已经被满足
+    heartbeatPurgatory.checkAndComplete(memberKey) // 完成当前心跳期望
 
     // reschedule the next heartbeat expiration deadline
-    member.heartbeatSatisfied = false
+    member.heartbeatSatisfied = false // 再次将成员的heartbeatSatisfied属性设置为false，为接下来的心跳检查准备
     val delayedHeartbeat = new DelayedHeartbeat(this, group, member.memberId, isPending = false, timeoutMs)
-    heartbeatPurgatory.tryCompleteElseWatch(delayedHeartbeat, Seq(memberKey))
+    heartbeatPurgatory.tryCompleteElseWatch(delayedHeartbeat, Seq(memberKey)) // 尝试立即完成心跳，如果不能立即完成，则监视给定的成员键。
   }
 
   /**

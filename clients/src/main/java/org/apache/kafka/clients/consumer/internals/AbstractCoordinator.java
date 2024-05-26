@@ -1184,8 +1184,8 @@ public abstract class AbstractCoordinator implements Closeable {
                         .setMemberId(this.generation.memberId)
                         .setGroupInstanceId(this.rebalanceConfig.groupInstanceId.orElse(null))
                         .setGenerationId(this.generation.generationId));
-        return client.send(coordinator, requestBuilder)
-                .compose(new HeartbeatResponseHandler(generation));
+        return client.send(coordinator, requestBuilder) // send方法返回一个RequestFuture对象，然后调用compose方法处理返回的响应。
+                .compose(new HeartbeatResponseHandler(generation)); // compose方法接受一个处理响应的函数或处理器
     }
 
     private class HeartbeatResponseHandler extends CoordinatorResponseHandler<HeartbeatResponse, Void> {
@@ -1490,7 +1490,9 @@ public abstract class AbstractCoordinator implements Closeable {
                             // coordinator disconnected
                             AbstractCoordinator.this.wait(rebalanceConfig.retryBackoffMs);
                         } else {
+                            // 设置心跳的时间
                             heartbeat.sentHeartbeat(now);
+                            // 发送心跳请求
                             final RequestFuture<Void> heartbeatFuture = sendHeartbeatRequest();
                             heartbeatFuture.addListener(new RequestFutureListener<Void>() {
                                 @Override

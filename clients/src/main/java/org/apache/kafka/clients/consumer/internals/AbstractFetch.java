@@ -270,12 +270,14 @@ public abstract class AbstractFetch<K, V> implements Closeable {
      */
     public Fetch<K, V> collectFetch() {
         Fetch<K, V> fetch = Fetch.empty(); // 创建一个空的 Fetch 对象，用来存储拉取来的消息
-        Queue<CompletedFetch<K, V>> pausedCompletedFetches = new ArrayDeque<>(); // 创建一个队列，用来存储被暂停的CompletedFetches，CompletedFetches表示从 broker 拉回的一批消息
+        // 创建一个队列，用来存储被暂停分区的CompletedFetches，CompletedFetches表示从 broker 拉回的一批消息
+        Queue<CompletedFetch<K, V>> pausedCompletedFetches = new ArrayDeque<>();
         int recordsRemaining = fetchConfig.maxPollRecords;
 
         try {
             while (recordsRemaining > 0) {
-                // 如果没有可用的nextInLineFetch或者当前的nextInLineFetch已经被消费完，则尝试从completedFetches队列中查看下一个元素，并对其进行初始化处理。
+                // 如果nextInLineFetch是null或者当前的批次已经被完全消费了，这就意味着消费者客户端需要向服务器发起新的fetch请求以获取更多的消息
+                // nextInLineFetch具体表示了待处理的、包含一组消息的数据结构
                 if (nextInLineFetch == null || nextInLineFetch.isConsumed) {
                     CompletedFetch<K, V> records = completedFetches.peek();
                     if (records == null) break;

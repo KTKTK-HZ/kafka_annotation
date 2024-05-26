@@ -1816,6 +1816,7 @@ class KafkaApis(val requestChannel: RequestChannel, // 请求通道
       requestHelper.sendMaybeThrottle(request, heartbeatRequest.getErrorResponse(Errors.GROUP_AUTHORIZATION_FAILED.exception))
       CompletableFuture.completedFuture[Unit](())
     } else {
+      // 上面的代码大多数都在解析请求，下面开始对请求进行相应的处理
       groupCoordinator.heartbeat(
         request.context,
         heartbeatRequest.data

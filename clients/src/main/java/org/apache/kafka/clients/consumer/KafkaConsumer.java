@@ -1250,10 +1250,11 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
                 /**
                  * 消费端一般是使用while(true)无限循环拉取消息, 如果确定要退出循环，需要通过另一个线程调用consumer.wakeup()方法。
                  * 如果循环运行 在主线程里，可以在 ShutdownHook里调用该方法。要记住，consumer.wakeup()是消费者唯一一个可以从其他线程里安全调用的方法。
-                 * 调用consumer.wakeup()可以退出 poll(),并抛出 WakeupException异常，或者如果调用 cconsumer.wakeup()时线程没有等待轮询，那么异常将在下一轮调用 poll()时抛出。
+                 * 调用consumer.wakeup()可以退出 poll(),并抛出 WakeupException异常，或者如果调用 consumer.wakeup()时线程没有等待轮询，那么异常将在下一轮调用 poll()时抛出。
                  * 我们不需要处理 WakeupException，因为它只是用于跳出循环的一种方式。不过， 在退出线程之前调用 consumer.close()是很有必要的，
                  * 它会提交任何还没有提交的东西，并向群组协调器(broker)发送消息，告知自己要离开群组，接下来 就会触发再均衡 ，而不需要等待会话超时。
                  * 该步骤是为了判断消费者线程是否可以被安全地中断
+                 * 所以maybeTriggerWakeup会判断wakeupDisabled和 workup 的状态，符合条件后优雅的退出 while 循环
                  * */
                 client.maybeTriggerWakeup();
 
@@ -1304,7 +1305,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
     }
 
     boolean updateAssignmentMetadataIfNeeded(final Timer timer, final boolean waitForJoinGroup) {
-        if (coordinator != null && !coordinator.poll(timer, waitForJoinGroup)) { // 如果coordinator 不为 null，则调用coordinator.poll会进行处理
+        if (coordinator != null && !coordinator.poll(timer, waitForJoinGroup)) { // 如果coordinator 不为 null，则调用coordinator.poll进行处理
             return false;
         }
 

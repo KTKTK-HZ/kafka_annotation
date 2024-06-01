@@ -128,7 +128,11 @@ class KafkaServer(
   var controlPlaneRequestHandlerPool: KafkaRequestHandlerPool = _
 
   var logDirFailureChannel: LogDirFailureChannel = _
-  @volatile private var _logManager: LogManager = _
+  @volatile private var _logManager: LogManager = _ // 可能会被多个线程频繁访问和更新，因此使用 @volatile 确保线程安全性。
+  /**
+   * remoteLogManager 是一个可选的 RemoteLogManager 实例，初始状态为 None，意味着可能暂时没有使用远程日志管理器。
+   * 以后可能会初始化为 Some(remoteLogManagerInstance)，表示实际存在的远程日志管理器对象。
+   * */
   var remoteLogManager: Option[RemoteLogManager] = None
 
   @volatile private var _replicaManager: ReplicaManager = _
@@ -226,7 +230,9 @@ class KafkaServer(
         _clusterId = getOrGenerateClusterId(zkClient)
         info(s"Cluster ID = $clusterId")
 
-        /* load metadata */
+        /* load metadata
+        * Offline Dirs: 表示那些当前不可用的日志目录，可能因为磁盘故障或其他原因不能被访问。
+        * */
         val (preloadedBrokerMetadataCheckpoint, initialOfflineDirs) =
           BrokerMetadataCheckpoint.getBrokerMetadataAndOfflineDirs(config.logDirs, ignoreMissing = true, kraftMode = false)
 

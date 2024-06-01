@@ -212,7 +212,7 @@ class LogManager(logDirs: Seq[File],
       recoveryPointCheckpoints = recoveryPointCheckpoints.filter { case (file, _) => file.getAbsolutePath != dir } // 从恢复点移除出问题的目录
       logStartOffsetCheckpoints = logStartOffsetCheckpoints.filter { case (file, _) => file.getAbsolutePath != dir } // 从日志开始偏移量的检查点中移除出问题的目录
       if (cleaner != null)
-        cleaner.handleLogDirFailure(dir) // 如果cleaner存在，则停止对该目录的清理，并从检查点移除
+        cleaner.handleLogDirFailure(dir) // 如果cleaner不存在，则停止对该目录的清理，并从检查点移除
 
       def removeOfflineLogs(logs: Pool[TopicPartition, UnifiedLog]): Iterable[TopicPartition] = {
         val offlineTopicPartitions: Iterable[TopicPartition] = logs.collect {

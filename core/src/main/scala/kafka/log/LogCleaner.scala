@@ -103,7 +103,9 @@ class LogCleaner(initialConfig: CleanerConfig,
   /* Log cleaner configuration which may be dynamically updated */
   @volatile private var config = initialConfig
 
-  /* for managing the state of partitions being cleaned. package-private to allow access in tests */
+  /* for managing the state of partitions being cleaned. package-private to allow access in tests
+  * cleanerManager用于管理各分区的清理状态
+  * */
   private[log] val cleanerManager = new LogCleanerManager(logDirs, logs, logDirFailureChannel)
 
   /* a throttle used to limit the I/O of all the cleaner threads to a user-specified maximum rate */
@@ -152,6 +154,7 @@ class LogCleaner(initialConfig: CleanerConfig,
 
   /**
    * Start the background cleaning
+   * 根据设置的清理线程的数量创建对应的线程，并且启动
    */
   def startup(): Unit = {
     info("Starting the log cleaner")
@@ -164,6 +167,7 @@ class LogCleaner(initialConfig: CleanerConfig,
 
   /**
    * Stop the background cleaning
+   * 将所有清理线程停止
    */
   def shutdown(): Unit = {
     info("Shutting down the log cleaner.")
@@ -334,7 +338,7 @@ class LogCleaner(initialConfig: CleanerConfig,
     override def doWork(): Unit = {
       val cleaned = tryCleanFilthiestLog() // 尝试清理最脏的日志分区，也就是含有大量被标记为已删除或待压缩的日志的分区
       if (!cleaned)
-        pause(config.backoffMs, TimeUnit.MILLISECONDS)
+        pause(config.backoffMs, TimeUnit.MILLISECONDS) // 如果没有可清理 log，则 sleep 一段时间
 
       cleanerManager.maintainUncleanablePartitions()
     }
@@ -355,10 +359,17 @@ class LogCleaner(initialConfig: CleanerConfig,
       }
     }
 
+    /**
+     * 1、清理日志（cleanLog）：
+     * 清理和压缩日志，移除不必要的数据，更新日志段但不立即删除旧文件。
+     * 确保有效数据被保存在新的日志段中。
+     * 2、删除旧日志段（deleteOldSegments）：
+     * 遍历所有日志段，删除那些已经过期或不再需要的旧日志段文件。
+     * 物理上从磁盘中移除这些日志段，从而释放存储空间。*/
     @throws(classOf[LogCleaningException])
-    private def cleanFilthiestLog(): Boolean = {
-      val preCleanStats = new PreCleanStats()
-      val ltc = cleanerManager.grabFilthiestCompactedLog(time, preCleanStats)
+    private def cleanFilthiestLog(): Boolean = { // 该方法返回一个布尔值，指示是否成功清理了日志。
+      val preCleanStats = new PreCleanStats() // 创建一个 PreCleanStats 实例，用于记录预清理的统计信息。
+      val ltc = cleanerManager.grabFilthiestCompactedLog(time, preCleanStats) // 获取最脏的压缩日志（log to clean, 简称 ltc），同时更新 preCleanStats。
       val cleaned = ltc match {
         case None =>
           false
@@ -366,18 +377,18 @@ class LogCleaner(initialConfig: CleanerConfig,
           // there's a log, clean it
           this.lastPreCleanStats = preCleanStats
           try {
-            cleanLog(cleanable)
+            cleanLog(cleanable) // cleanLog 函数会处理日志的内容，使其更加紧凑和高效，但不会立即删除旧的日志段文件。
             true
           } catch {
             case e @ (_: ThreadShutdownException | _: ControlThrowable) => throw e
             case e: Exception => throw new LogCleaningException(cleanable.log, e.getMessage, e)
           }
       }
-      val deletable: Iterable[(TopicPartition, UnifiedLog)] = cleanerManager.deletableLogs()
+      val deletable: Iterable[(TopicPartition, UnifiedLog)] = cleanerManager.deletableLogs() // 获取可删除的日志段
       try {
         deletable.foreach { case (_, log) =>
           try {
-            log.deleteOldSegments()
+            log.deleteOldSegments() // deleteOldSegments 的主要任务是物理删除旧的日志段文件
           } catch {
             case e @ (_: ThreadShutdownException | _: ControlThrowable) => throw e
             case e: Exception => throw new LogCleaningException(log, e.getMessage, e)
@@ -392,7 +403,7 @@ class LogCleaner(initialConfig: CleanerConfig,
 
     private def cleanLog(cleanable: LogToClean): Unit = {
       val startOffset = cleanable.firstDirtyOffset
-      var endOffset = startOffset
+      var endOffset = startOffset // endOffset 初始化为 startOffset，将用来记录清理完毕后的偏移量。
       try {
         val (nextDirtyOffset, cleanerStats) = cleaner.clean(cleanable)
         endOffset = nextDirtyOffset
@@ -520,9 +531,9 @@ private[log] class Cleaner(val id: Int,
     // this position is defined to be a configurable time beneath the last modified time of the last clean segment
     // this timestamp is only used on the older message formats older than MAGIC_VALUE_V2
     val legacyDeleteHorizonMs =
-      cleanable.log.logSegments(0, cleanable.firstDirtyOffset).lastOption match {
+      cleanable.log.logSegments(0, cleanable.firstDirtyOffset).lastOption match { // 从cleanable.log 中获取最后一段logSegments，范围是从偏移量 0 到 cleanable.firstDirtyOffset。
         case None => 0L
-        case Some(seg) => seg.lastModified - cleanable.log.config.deleteRetentionMs
+        case Some(seg) => seg.lastModified - cleanable.log.config.deleteRetentionMs // 计算了从最后一个日志段的最后修改时间减去删除保留时间的差值
       }
 
     val log = cleanable.log
@@ -530,7 +541,7 @@ private[log] class Cleaner(val id: Int,
 
     // build the offset map
     info("Building offset map for %s...".format(cleanable.log.name))
-    val upperBoundOffset = cleanable.firstUncleanableOffset
+    val upperBoundOffset = cleanable.firstUncleanableOffset // 获取第一个不可被清理的 offset，并将其赋值给upperBoundOffset
     buildOffsetMap(log, cleanable.firstDirtyOffset, upperBoundOffset, offsetMap, stats)
     val endOffset = offsetMap.latestOffset + 1
     stats.indexDone()
@@ -576,6 +587,7 @@ private[log] class Cleaner(val id: Int,
                                  transactionMetadata: CleanedTransactionMetadata,
                                  legacyDeleteHorizonMs: Long): Unit = {
     // create a new segment with a suffix appended to the name of the log and indexes
+    // 创建一个新的清理目标段，名称带有后缀以区分于原始段。
     val cleaned = UnifiedLog.createNewCleanedSegment(log.dir, log.config, segments.head.baseOffset)
     transactionMetadata.cleanedIndex = Some(cleaned.txnIndex)
 
@@ -918,13 +930,13 @@ private[log] class Cleaner(val id: Int,
    * @param map The map in which to store the mappings
    * @param stats Collector for cleaning statistics
    */
-  private[log] def buildOffsetMap(log: UnifiedLog,
-                                  start: Long,
-                                  end: Long,
+  private[log] def buildOffsetMap(log: UnifiedLog, // 要处理的日志对象
+                                  start: Long, // 第一个脏 offset
+                                  end: Long, // 第一个不能被清理的 offset
                                   map: OffsetMap,
                                   stats: CleanerStats): Unit = {
-    map.clear()
-    val dirty = log.logSegments(start, end).toBuffer
+    map.clear() // 清空偏移量映射表
+    val dirty = log.logSegments(start, end).toBuffer // 获取从 start 到 end 范围内的所有日志段，并转为 Buffer 以便后续操作
     val nextSegmentStartOffsets = new ListBuffer[Long]
     if (dirty.nonEmpty) {
       for (nextSegment <- dirty.tail) nextSegmentStartOffsets.append(nextSegment.baseOffset)
@@ -941,7 +953,7 @@ private[log] class Cleaner(val id: Int,
     var full = false
     for ((segment, nextSegmentStartOffset) <- dirty.zip(nextSegmentStartOffsets) if !full) {
       checkDone(log.topicPartition)
-
+      // 遍历日志段，将消息记录的键和偏移量存入 OffsetMap 中
       full = buildOffsetMapForSegment(log.topicPartition, segment, map, start, nextSegmentStartOffset, log.config.maxMessageSize,
         transactionMetadata, stats)
       if (full)
@@ -952,7 +964,9 @@ private[log] class Cleaner(val id: Int,
 
   /**
    * Add the messages in the given segment to the offset map
-   *
+   * buildOffsetMapForSegment 方法的主要功能是遍历处理一个日志段中的消息记录，将其偏移量和对应的键存入 OffsetMap 中。
+   * 它会处理控制批次和有效消息批次，记录统计信息，并在映射表已满时返回 true。
+   * 此外，它还会检查是否需要中止操作，确保清理过程可控且高效。
    * @param segment The segment to index
    * @param map The map in which to store the key=>offset mapping
    * @param stats Collector for cleaning statistics
@@ -967,18 +981,19 @@ private[log] class Cleaner(val id: Int,
                                        maxLogMessageSize: Int,
                                        transactionMetadata: CleanedTransactionMetadata,
                                        stats: CleanerStats): Boolean = {
-    var position = segment.offsetIndex.lookup(startOffset).position
+    var position = segment.offsetIndex.lookup(startOffset).position // 从offset 索引中获取 startOffset 对应的位置
     val maxDesiredMapSize = (map.slots * this.dupBufferLoadFactor).toInt
     while (position < segment.log.sizeInBytes) {
-      checkDone(topicPartition)
+      checkDone(topicPartition) // 检查是否需要终止
       readBuffer.clear()
       try {
-        segment.log.readInto(readBuffer, position)
+        segment.log.readInto(readBuffer, position) // 从 segment.log 读取消息到 readBuffer
       } catch {
         case e: Exception =>
           throw new KafkaException(s"Failed to read from segment $segment of partition $topicPartition " +
             "while loading offset map", e)
       }
+      // 解析 readBuffer 中的消息记录，并根据读取的字节数进行节流处理
       val records = MemoryRecords.readableRecords(readBuffer)
       throttler.maybeThrottle(records.sizeInBytes)
 
@@ -997,7 +1012,7 @@ private[log] class Cleaner(val id: Int,
             val recordsIterator = batch.streamingIterator(decompressionBufferSupplier)
             try {
               for (record <- recordsIterator.asScala) {
-                if (record.hasKey && record.offset >= startOffset) {
+                if (record.hasKey && record.offset >= startOffset) { // 如果消息有键且偏移量不小于 startOffset，则将键和偏移量存入 map 中
                   if (map.size < maxDesiredMapSize)
                     map.put(record.key, record.offset)
                   else
@@ -1017,14 +1032,16 @@ private[log] class Cleaner(val id: Int,
       stats.indexBytesRead(bytesRead)
 
       // if we didn't read even one complete message, our read buffer may be too small
+      // 如果没有读取到完整的消息，检查是否需要扩大缓冲区大小。
       if(position == startPosition)
         growBuffersOrFail(segment.log, position, maxLogMessageSize, records)
     }
 
     // In the case of offsets gap, fast forward to latest expected offset in this segment.
+    // 在偏移量有间隙的情况下，快速前进到下一个段的起始偏移量-1
     map.updateLatestOffset(nextSegmentStartOffset - 1L)
 
-    restoreBuffers()
+    restoreBuffers() // 恢复缓冲区并返回 false，表示偏移量映射表未满
     false
   }
 }

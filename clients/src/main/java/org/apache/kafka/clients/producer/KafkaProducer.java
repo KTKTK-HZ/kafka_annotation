@@ -367,9 +367,9 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
         try {
             this.producerConfig = config;
             this.time = time;
-            //获取transactional ID，其保证会话的可靠性，如果配置表示启用幂等+事务
+            //获取transactional ID，其保证会话的可靠性，如果配置表示启用幂等+事务,默认为 null
             String transactionalId = config.getString(ProducerConfig.TRANSACTIONAL_ID_CONFIG);
-            //获取client ID
+            //获取client ID，如果用户没有设置，默认为 producer-(transactionalId)-自增序号
             this.clientId = config.getString(ProducerConfig.CLIENT_ID_CONFIG);
 
             //日志相关
@@ -393,7 +393,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
             this.metrics = new Metrics(metricConfig, reporters, time, metricsContext);
             this.producerMetrics = new KafkaProducerMetrics(metrics);
 
-            //获取分区器
+            //通过配置构建分区器，如果用户没有配置，则为 null。生产者发送数据的时候使用内置分区器--BuiltInPartitioner
             this.partitioner = config.getConfiguredInstance(
                     ProducerConfig.PARTITIONER_CLASS_CONFIG,
                     Partitioner.class,
@@ -433,6 +433,8 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                 this.interceptors = interceptors;
             else
                 this.interceptors = new ProducerInterceptors<>(interceptorList);
+            // 集群资源监听器，当实例想获得元数据变更时需要实现ClusterResourceListener，例如keySerializer，interceptor等，当集群资源变化时
+            // 集群资源监听器将会使用onUpdate进行通知
             ClusterResourceListeners clusterResourceListeners = configureClusterResourceListeners(this.keySerializer,
                     this.valueSerializer, interceptorList, reporters);
 
@@ -460,7 +462,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
              * 创建RecordAccumulator，它是一个发送消息数据的记录缓冲器，用于批量发送消息数据
              * batch.size单位是字节，默认16k 用于指定达到多少字节批量发送一次
              */
-            this.accumulator = new RecordAccumulator(logContext, // log记录器
+            this.accumulator = new RecordAccumulator(logContext, // log的上下文
                     batchSize, // 消息批次大小，默认16KB
                     this.compressionType, // 消息压缩类型
                     lingerMs(config), // 消息 batch 延迟多久再发送的时间，这是吞吐量与延时之间的权衡。为了不频繁发送网络请求，设置延迟时间后 batch 会尽量积累更多的消息再发送出去。
@@ -468,10 +470,11 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                     deliveryTimeoutMs,
                     partitionerConfig,
                     metrics,
-                    PRODUCER_METRIC_GROUP_NAME,
+                    PRODUCER_METRIC_GROUP_NAME, // 生产者的度量指标组
                     time,
                     apiVersions,
                     transactionManager,
+                    // 一个新的缓冲池，用于减少RecordAccumulator内存清理的频率
                     new BufferPool(this.totalMemorySize, batchSize, metrics, time, PRODUCER_METRIC_GROUP_NAME));
             //bootstrap.server,kafka集群的地址
             List<InetSocketAddress> addresses = ClientUtils.parseAndValidateAddresses(
@@ -1192,7 +1195,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
      */
     private ClusterAndWaitTime waitOnMetadata(String topic, Integer partition, long nowMs, long maxWaitMs) throws InterruptedException {
         // add topic to metadata topic list if it is not there already and reset expiry
-        // 抓取集群的元数据
+        // 抓取集群的元数据,注意，第一次时获取到的 cluster 是空的
         Cluster cluster = metadata.fetch();
         // 如果集群元数据中无效topic的set中包含这个topic，则抛出异常
         if (cluster.invalidTopics().contains(topic))
@@ -1224,7 +1227,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
             int version = metadata.requestUpdateForTopic(topic);
             sender.wakeup();
             try {
-                metadata.awaitUpdate(version, remainingWaitMs);
+                metadata.awaitUpdate(version, remainingWaitMs); // 等待元数据拉取成功
             } catch (TimeoutException ex) {
                 // Rethrow with original maxWaitMs to prevent logging exception with remainingWaitMs
                 throw new TimeoutException(

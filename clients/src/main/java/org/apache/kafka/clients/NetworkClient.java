@@ -555,9 +555,9 @@ public class NetworkClient implements KafkaClient {
      */
     @Override
     public List<ClientResponse> poll(long timeout, long now) {
-        ensureActive();
+        ensureActive(); // 确保 NetworkClient可用
 
-        if (!abortedSends.isEmpty()) {
+        if (!abortedSends.isEmpty()) { // 因版本不支持或者连接中断导致的发送失败
             // If there are aborted sends because of unsupported version exceptions or disconnects,
             // handle them immediately without waiting for Selector#poll.
             List<ClientResponse> responses = new ArrayList<>();

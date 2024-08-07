@@ -1386,6 +1386,7 @@ public final class Utils {
 
     /**
      * Convert a properties to map. All keys in properties must be string type. Otherwise, a ConfigException is thrown.
+     * 将 properties 格式的参数转换成 Map 格式
      * @param properties to be converted
      * @return a map including all elements in properties
      */

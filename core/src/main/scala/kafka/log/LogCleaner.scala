@@ -597,6 +597,7 @@ private[log] class Cleaner(val id: Int,
       var currentSegmentOpt: Option[LogSegment] = Some(iter.next())
       val lastOffsetOfActiveProducers = log.lastRecordsOfActiveProducers
 
+      // 进入主循环，遍历每个日志段
       while (currentSegmentOpt.isDefined) {
         val currentSegment = currentSegmentOpt.get
         val nextSegmentOpt = if (iter.hasNext) Some(iter.next()) else None
@@ -873,8 +874,8 @@ private[log] class Cleaner(val id: Int,
    * @return A list of grouped segments
    */
   private[log] def groupSegmentsBySize(segments: Iterable[LogSegment], maxSize: Int, maxIndexSize: Int, firstUncleanableOffset: Long): List[Seq[LogSegment]] = {
-    var grouped = List[List[LogSegment]]()
-    var segs = segments.toList
+    var grouped = List[List[LogSegment]]() // 用于存放最终的分组结果
+    var segs = segments.toList // 存储待处理的日志段列表
     while(segs.nonEmpty) {
       var group = List(segs.head)
       var logSize = segs.head.size.toLong

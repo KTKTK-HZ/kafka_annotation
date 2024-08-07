@@ -87,11 +87,11 @@ public class QuorumState {
 
     private volatile EpochState state;
 
-    public QuorumState(OptionalInt localId,
-                       Set<Integer> voters,
-                       int electionTimeoutMs,
-                       int fetchTimeoutMs,
-                       QuorumStateStore store,
+    public QuorumState(OptionalInt localId, // 本地 Id
+                       Set<Integer> voters, // 所有投票者
+                       int electionTimeoutMs, // 投票超时时间
+                       int fetchTimeoutMs, // Raft 副本拉取超时时间
+                       QuorumStateStore store, // QuorumState 存储
                        Time time,
                        LogContext logContext,
                        Random random) {

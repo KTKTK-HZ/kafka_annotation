@@ -74,7 +74,7 @@ public final class ClientUtils {
                         if (address.isUnresolved()) {
                             log.warn("Couldn't resolve server {} from {} as DNS resolution failed for {}", url, CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, host);
                         } else {
-                            addresses.add(address);
+                            addresses.add(address); // test
                         }
                     }
 

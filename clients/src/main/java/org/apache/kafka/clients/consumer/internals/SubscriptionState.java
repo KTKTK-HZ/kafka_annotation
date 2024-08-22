@@ -75,6 +75,12 @@ public class SubscriptionState {
     private final Logger log;
 
     private enum SubscriptionType {
+        /**
+         * NONE:初始值，表示没有订阅任何的 Topic
+         * AUTO_TOPICS: 按照指定 TOPIC 进行订阅
+         * AUTO_PATTERN：按照正则项匹配 TOPIC 进行订阅
+         * USER_ASSIGNED：订阅指定的TOPIC 和分区
+         * */
         NONE, AUTO_TOPICS, AUTO_PATTERN, USER_ASSIGNED
     }
 

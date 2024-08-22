@@ -484,7 +484,7 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
     void maybeUpdateSubscriptionMetadata() {
         int version = metadata.updateVersion(); // 获取当前元数据版本
         if (version > metadataSnapshot.version) {
-            Cluster cluster = metadata.fetch(); // 获取元数据
+            Cluster cluster = metadata.fetch(); // 获取缓存的元数据
 
             if (subscriptions.hasPatternSubscription())
                 updatePatternSubscription(cluster);
@@ -516,11 +516,11 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
      * @return true iff the operation succeeded
      */
     public boolean poll(Timer timer, boolean waitForJoinGroup) {
-        // 更新元数据快照
+        // 更新元数据快照，元数据快照主要用于检测是否需要进行重平衡
         maybeUpdateSubscriptionMetadata();
-        // 处理已经提交的offset
+        // 对提交位移的结果进行回调
         invokeCompletedOffsetCommitCallbacks();
-
+        // 如果订阅指定 Topic 或使用正则项订阅 Topic
         if (subscriptions.hasAutoAssignedPartitions()) {
             if (protocol == null) {
                 throw new IllegalStateException("User configured " + ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG +
@@ -533,7 +533,7 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
             if (coordinatorUnknownAndUnreadySync(timer)) {
                 return false;
             }
-
+            // rejoinNeededOrPending判断是否需要重平衡，如果需要就将标志为更改为 true 并返回 true
             if (rejoinNeededOrPending()) {
                 // due to a race condition between the initial metadata fetch and the initial rebalance,
                 // we need to ensure that the metadata is fresh before joining initially. This ensures
@@ -546,18 +546,20 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
                     // reduce the number of rebalances caused by single topic creation by asking consumer to
                     // refresh metadata before re-joining the group as long as the refresh backoff time has
                     // passed.
+                    // 在正则匹配订阅模式下，入组前需要更新一次元数据
                     if (this.metadata.timeToAllowUpdate(timer.currentTimeMs()) == 0) {
                         this.metadata.requestUpdate();
                     }
-
+                    // ensureFreshMetadata会对元数据进行更新
                     if (!client.ensureFreshMetadata(timer)) {
                         return false;
                     }
-
+                    // 因为元数据已经进行了更新，所以再次更新元数据快照
                     maybeUpdateSubscriptionMetadata();
                 }
 
                 // if not wait for join group, we would just use a timer of 0
+                // 核心方法：ensureActiveGroup
                 if (!ensureActiveGroup(waitForJoinGroup ? timer : time.timer(0L))) {
                     // since we may use a different timer in the callee, we'd still need
                     // to update the original timer's current time after the call
@@ -567,6 +569,7 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
                 }
             }
         } else {
+            // 订阅指定的 Topic 和分区，这个时候由于分区是指定的，所以并不需要 Kafka 进行消费者组平衡
             // For manually assigned partitions, we do not try to pro-actively lookup coordinator;
             // instead we only try to refresh metadata when necessary.
             // If connections to all nodes fail, wakeups triggered while attempting to send fetch
@@ -663,7 +666,7 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
                                                       String assignmentStrategy,
                                                       List<JoinGroupResponseData.JoinGroupResponseMember> allSubscriptions,
                                                       boolean skipAssignment) {
-        ConsumerPartitionAssignor assignor = lookupAssignor(assignmentStrategy);
+        ConsumerPartitionAssignor assignor = lookupAssignor(assignmentStrategy); // 根据策略名获取对应的分区分配器
         if (assignor == null)
             throw new IllegalStateException("Coordinator selected invalid assignment protocol: " + assignmentStrategy);
         String assignorName = assignor.name();
@@ -922,22 +925,23 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
      */
     @Override
     public boolean rejoinNeededOrPending() {
-        // 如果队列负载是用户指定的，返回false，表示不需要重新平衡
+        // 如果订阅方式是指定分区，则返回false，表示不需要重新平衡
         if (!subscriptions.hasAutoAssignedPartitions())
             return false;
 
         // we need to rejoin if we performed the assignment and metadata has changed;
         // also for those owned-but-no-longer-existed partitions we should drop them as lost
-        //如果队列是自动负载，topic元数据发生变化，则需要重新平衡
+        //如果我们已经对需要消费的分区进行了分配，但是topic元数据发生变化，则需要重新平衡
         if (assignmentSnapshot != null && !assignmentSnapshot.matches(metadataSnapshot)) {
             final String fullReason = String.format("cached metadata has changed from %s at the beginning of the rebalance to %s",
                 assignmentSnapshot, metadataSnapshot);
+            // 将rejoinNeeded这一标志更改成 true
             requestRejoinIfNecessary("cached metadata has changed", fullReason);
             return true;
         }
 
         // we need to join if our subscription has changed since the last join
-        // 如果队列自动负载，订阅关系发生了变化，需要重新平衡
+        // 订阅关系发生了变化，需要重新平衡
         if (joinedSubscription != null && !joinedSubscription.equals(subscriptions.subscription())) {
             final String fullReason = String.format("subscription has changed from %s at the beginning of the rebalance to %s",
                 joinedSubscription, subscriptions.subscription());

@@ -701,16 +701,17 @@ class KafkaApis(val requestChannel: RequestChannel, // 请求通道
    * Handle a fetch request
    */
   def handleFetchRequest(request: RequestChannel.Request): Unit = {
-    val versionId = request.header.apiVersion
+    val versionId = request.header.apiVersion // api版本
     val clientId = request.header.clientId
     val fetchRequest = request.body[FetchRequest]
+    // fetchRequest和 fetchResponse 版本大于 13之后，开始支持 topicId
     val topicNames =
       if (fetchRequest.version() >= 13)
         metadataCache.topicIdsToNames()
       else
         Collections.emptyMap[Uuid, String]()
 
-    val fetchData = fetchRequest.fetchData(topicNames)
+    val fetchData = fetchRequest.fetchData(topicNames) // 获取请求中 topic 和 partition 的对应信息
     val forgottenTopics = fetchRequest.forgottenTopics(topicNames)
 
     val fetchContext = fetchManager.newContext(

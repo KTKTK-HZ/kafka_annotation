@@ -401,7 +401,7 @@ public class FetchRequest extends AbstractRequest {
     public Map<TopicIdPartition, PartitionData> fetchData(Map<Uuid, String> topicNames) {
         if (fetchData == null) {
             synchronized (this) {
-                if (fetchData == null) {
+                if (fetchData == null) { // 再次检查 fetchData 是否为 null，避免在多个线程同时进入同步块时重复初始化
                     // Assigning the lazy-initialized `fetchData` in the last step
                     // to avoid other threads accessing a half-initialized object.
                     final LinkedHashMap<TopicIdPartition, PartitionData> fetchDataTmp = new LinkedHashMap<>();

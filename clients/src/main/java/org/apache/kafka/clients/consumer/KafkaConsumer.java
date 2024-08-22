@@ -675,10 +675,12 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
     @SuppressWarnings("unchecked")
     KafkaConsumer(ConsumerConfig config, Deserializer<K> keyDeserializer, Deserializer<V> valueDeserializer) {
         try {
+            // 消费者组重平衡的相关配置
             GroupRebalanceConfig groupRebalanceConfig = new GroupRebalanceConfig(config,
                     GroupRebalanceConfig.ProtocolType.CONSUMER);
-
+            // 获得消费者组 id
             this.groupId = Optional.ofNullable(groupRebalanceConfig.groupId);
+            // 获得 clientId
             this.clientId = config.getString(CommonClientConfigs.CLIENT_ID_CONFIG);
 
             LogContext logContext;
@@ -692,6 +694,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
             }
 
             this.log = logContext.logger(getClass());
+            // 是否自动提交 offset
             boolean enableAutoCommit = config.maybeOverrideEnableAutoCommit();
             groupId.ifPresent(groupIdStr -> {
                 if (groupIdStr.isEmpty()) {
@@ -700,12 +703,15 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
             });
 
             log.debug("Initializing the Kafka consumer");
+            // 请求超时时间，在这个时间内，服务端要接收客户端的心跳
             this.requestTimeoutMs = config.getInt(ConsumerConfig.REQUEST_TIMEOUT_MS_CONFIG);
             this.defaultApiTimeoutMs = config.getInt(ConsumerConfig.DEFAULT_API_TIMEOUT_MS_CONFIG);
             this.time = Time.SYSTEM;
             this.metrics = buildMetrics(config, time, clientId);
+            // 重试时间间隔，一般默认为 100ms
             this.retryBackoffMs = config.getLong(ConsumerConfig.RETRY_BACKOFF_MS_CONFIG);
 
+            // consumer 同样也有拦截器
             List<ConsumerInterceptor<K, V>> interceptorList = (List) config.getConfiguredInstances(
                     ConsumerConfig.INTERCEPTOR_CLASSES_CONFIG,
                     ConsumerInterceptor.class,
@@ -725,15 +731,18 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
                 config.ignore(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG);
                 this.valueDeserializer = valueDeserializer;
             }
+            // offset 重置策略，即在没有 offset 的时候，消费者送哪个位置开始消费，一般为 least 或 earliest
             OffsetResetStrategy offsetResetStrategy = OffsetResetStrategy.valueOf(config.getString(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG).toUpperCase(Locale.ROOT));
             this.subscriptions = new SubscriptionState(logContext, offsetResetStrategy);
             ClusterResourceListeners clusterResourceListeners = configureClusterResourceListeners(this.keyDeserializer,
                     this.valueDeserializer, metrics.reporters(), interceptorList);
+            // 消费者元数据，这里会配置是否可以消费 kafka 内部 topic 和能否自动创建 topic
             this.metadata = new ConsumerMetadata(retryBackoffMs,
                     config.getLong(ConsumerConfig.METADATA_MAX_AGE_CONFIG),
                     !config.getBoolean(ConsumerConfig.EXCLUDE_INTERNAL_TOPICS_CONFIG),
                     config.getBoolean(ConsumerConfig.ALLOW_AUTO_CREATE_TOPICS_CONFIG),
                     subscriptions, logContext, clusterResourceListeners);
+            // 集群连接信息
             List<InetSocketAddress> addresses = ClientUtils.parseAndValidateAddresses(
                     config.getList(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG), config.getString(ConsumerConfig.CLIENT_DNS_LOOKUP_CONFIG));
             this.metadata.bootstrap(addresses);
@@ -742,11 +751,14 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
             FetchMetricsRegistry metricsRegistry = new FetchMetricsRegistry(Collections.singleton(CLIENT_ID_METRIC_TAG), metricGrpPrefix);
             FetchMetricsManager fetchMetricsManager = new FetchMetricsManager(metrics, metricsRegistry);
             ChannelBuilder channelBuilder = ClientUtils.createChannelBuilder(config, time, logContext);
+            // 事务消息隔离级别
             this.isolationLevel = IsolationLevel.valueOf(
                     config.getString(ConsumerConfig.ISOLATION_LEVEL_CONFIG).toUpperCase(Locale.ROOT));
+            // 客户端心跳间隔
             int heartbeatIntervalMs = config.getInt(ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG);
 
             ApiVersions apiVersions = new ApiVersions();
+            // 创建客户端对象，用于处理网络
             NetworkClient netClient = new NetworkClient(
                     new Selector(config.getLong(ConsumerConfig.CONNECTIONS_MAX_IDLE_MS_CONFIG), metrics, time, metricGrpPrefix, channelBuilder, logContext),
                     this.metadata,
@@ -772,13 +784,14 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
                     retryBackoffMs,
                     config.getInt(ConsumerConfig.REQUEST_TIMEOUT_MS_CONFIG),
                     heartbeatIntervalMs); //Will avoid blocking an extended period of time to prevent heartbeat thread starvation
-
+            // 分区分配策略
             this.assignors = ConsumerPartitionAssignor.getAssignorInstances(
                     config.getList(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG),
                     config.originals(Collections.singletonMap(ConsumerConfig.CLIENT_ID_CONFIG, clientId))
             );
 
             // no coordinator will be constructed for the default (null) group id
+            // 创建 ConsumerCoordinator 为消费者组做准备，如果 groupId 为空，则在此处不创建，返回 null
             if (!groupId.isPresent()) {
                 config.ignore(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG);
                 config.ignore(ConsumerConfig.THROW_ON_FETCH_STABLE_OFFSET_UNSUPPORTED);
@@ -799,6 +812,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
                         config.getBoolean(ConsumerConfig.THROW_ON_FETCH_STABLE_OFFSET_UNSUPPORTED),
                         config.getString(ConsumerConfig.CLIENT_RACK_CONFIG));
             }
+            // 消息拉取的相关配置
             FetchConfig<K, V> fetchConfig = new FetchConfig<>(config,
                     this.keyDeserializer,
                     this.valueDeserializer,
@@ -1249,7 +1263,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
             do {
                 /**
                  * 消费端一般是使用while(true)无限循环拉取消息, 如果确定要退出循环，需要通过另一个线程调用consumer.wakeup()方法。
-                 * 如果循环运行 在主线程里，可以在 ShutdownHook里调用该方法。要记住，consumer.wakeup()是消费者唯一一个可以从其他线程里安全调用的方法。
+                 * 如果循环运行 在主线程里，可以在 ShutdownHook里调用该方法。consumer.wakeup()是消费者唯一一个可以从其他线程里安全调用的方法。
                  * 调用consumer.wakeup()可以退出 poll(),并抛出 WakeupException异常，或者如果调用 consumer.wakeup()时线程没有等待轮询，那么异常将在下一轮调用 poll()时抛出。
                  * 我们不需要处理 WakeupException，因为它只是用于跳出循环的一种方式。不过， 在退出线程之前调用 consumer.close()是很有必要的，
                  * 它会提交任何还没有提交的东西，并向群组协调器(broker)发送消息，告知自己要离开群组，接下来 就会触发再均衡 ，而不需要等待会话超时。
@@ -1305,10 +1319,11 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
     }
 
     boolean updateAssignmentMetadataIfNeeded(final Timer timer, final boolean waitForJoinGroup) {
-        if (coordinator != null && !coordinator.poll(timer, waitForJoinGroup)) { // 如果coordinator 不为 null，则调用coordinator.poll进行处理
+        // 如果coordinator 不为 null，则调用coordinator.poll进行处理，即消费者要已经完成入组或重平衡，获取到对应的消费分区
+        if (coordinator != null && !coordinator.poll(timer, waitForJoinGroup)) {
             return false;
         }
-
+        // 更新拉取的偏移量，如未设置则使用重置策略
         return updateFetchPositions(timer);
     }
 
@@ -2536,7 +2551,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
         // coordinator lookup if there are partitions which have missing positions, so
         // a consumer with manually assigned partitions can avoid a coordinator dependence
         // by always ensuring that assigned partitions have an initial position.
-        // 如果没有有效的offset，则需要从group coordinator中获取
+        // 如果没有有效的offset，则需要发送 commitedOffsets请求，从group coordinator中获取
         if (coordinator != null && !coordinator.refreshCommittedOffsetsIfNeeded(timer)) return false;
 
         // If there are partitions still needing a position and a reset policy is defined,

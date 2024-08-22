@@ -591,7 +591,7 @@ public class NetworkClient implements KafkaClient {
     private void completeResponses(List<ClientResponse> responses) {
         for (ClientResponse response : responses) {
             try {
-                response.onComplete();
+                response.onComplete(); // 执行每个 response 中的 onComplete方法
             } catch (Exception e) {
                 log.error("Uncaught error in request completion:", e);
             }

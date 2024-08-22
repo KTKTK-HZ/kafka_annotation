@@ -161,7 +161,7 @@ public class ConsumerNetworkClient implements Closeable {
     public boolean awaitMetadataUpdate(Timer timer) {
         int version = this.metadata.requestUpdate();
         do {
-            poll(timer);
+            poll(timer); // 进行一系列 poll 操作，包括更新元数据
         } while (this.metadata.updateVersion() == version && timer.notExpired());
         return this.metadata.updateVersion() > version;
     }

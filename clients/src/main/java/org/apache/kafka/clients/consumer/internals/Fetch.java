@@ -30,7 +30,7 @@ import static org.apache.kafka.common.utils.Utils.mkEntry;
 import static org.apache.kafka.common.utils.Utils.mkMap;
 
 public class Fetch<K, V> {
-    private final Map<TopicPartition, List<ConsumerRecord<K, V>>> records;
+    private final Map<TopicPartition, List<ConsumerRecord<K, V>>> records; // 使用 Map 用来存储拉取来的数据，partition -> List<records>
     private boolean positionAdvanced;
     private int numRecords;
 

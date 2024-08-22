@@ -252,16 +252,17 @@ public abstract class AbstractCoordinator implements Closeable {
     }
 
     private synchronized boolean ensureCoordinatorReady(final Timer timer, boolean disableWakeup) {
+        // 如果找到 groupCoordinator，直接返回
         if (!coordinatorUnknown())
             return true;
-
+        // 如果没有找到，循环给服务器发送请求，直到找到 groupCoordinator
         do {
             if (fatalFindCoordinatorException != null) {
                 final RuntimeException fatalException = fatalFindCoordinatorException;
                 fatalFindCoordinatorException = null;
                 throw fatalException;
             }
-            final RequestFuture<Void> future = lookupCoordinator();
+            final RequestFuture<Void> future = lookupCoordinator(); // 搜索 groupCoordinator
             client.poll(future, timer, disableWakeup);
 
             if (!future.isDone()) {
@@ -297,12 +298,12 @@ public abstract class AbstractCoordinator implements Closeable {
     protected synchronized RequestFuture<Void> lookupCoordinator() {
         if (findCoordinatorFuture == null) {
             // find a node to ask about the coordinator
-            Node node = this.client.leastLoadedNode();
+            Node node = this.client.leastLoadedNode(); // 获取负载最小的节点
             if (node == null) {
                 log.debug("No broker available to send FindCoordinator request");
                 return RequestFuture.noBrokersAvailable();
             } else {
-                findCoordinatorFuture = sendFindCoordinatorRequest(node);
+                findCoordinatorFuture = sendFindCoordinatorRequest(node); // 发送请求获取 groupCoordinator
             }
         }
         return findCoordinatorFuture;
@@ -875,6 +876,7 @@ public abstract class AbstractCoordinator implements Closeable {
         FindCoordinatorRequestData data = new FindCoordinatorRequestData()
                 .setKeyType(CoordinatorType.GROUP.id())
                 .setKey(this.rebalanceConfig.groupId);
+        // 构建 coordinator 查询请求
         FindCoordinatorRequest.Builder requestBuilder = new FindCoordinatorRequest.Builder(data);
         return client.send(node, requestBuilder)
                 .compose(new FindCoordinatorResponseHandler());

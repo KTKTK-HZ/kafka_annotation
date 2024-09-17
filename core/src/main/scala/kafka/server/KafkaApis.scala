@@ -704,14 +704,18 @@ class KafkaApis(val requestChannel: RequestChannel, // 请求通道
     val versionId = request.header.apiVersion // api版本
     val clientId = request.header.clientId
     val fetchRequest = request.body[FetchRequest]
-    // fetchRequest和 fetchResponse 版本大于 13之后，开始支持 topicId
+    /** fetchRequest和 fetchResponse 版本大于 13之后，开始支持 topicId
+     *  通过 version 字段来决定主题名称的获取方式，以进行版本兼容。topicNames为[topicId, topicName]的Map
+     * */
     val topicNames =
       if (fetchRequest.version() >= 13)
         metadataCache.topicIdsToNames()
       else
         Collections.emptyMap[Uuid, String]()
 
-    val fetchData = fetchRequest.fetchData(topicNames) // 获取请求中 topic 和 partition 的对应信息
+    // 获取请求中 topic 和 partition 的对应信息
+    val fetchData = fetchRequest.fetchData(topicNames)
+    // 获取需要忽略的 Topic 信息
     val forgottenTopics = fetchRequest.forgottenTopics(topicNames)
 
     val fetchContext = fetchManager.newContext(
@@ -724,6 +728,7 @@ class KafkaApis(val requestChannel: RequestChannel, // 请求通道
 
     val erroneous = mutable.ArrayBuffer[(TopicIdPartition, FetchResponseData.PartitionData)]()
     val interesting = mutable.ArrayBuffer[(TopicIdPartition, FetchRequest.PartitionData)]()
+    // 进行鉴权操作
     if (fetchRequest.isFromFollower) {
       // The follower must have ClusterAction on ClusterResource in order to fetch partition data.
       if (authHelper.authorize(request.context, CLUSTER_ACTION, CLUSTER, CLUSTER_NAME)) {
@@ -765,6 +770,7 @@ class KafkaApis(val requestChannel: RequestChannel, // 请求通道
       // for KafkaStorageException. In this case the client library will translate KafkaStorageException to
       // UnknownServerException which is not retriable. We can ensure that consumer will update metadata and retry
       // by converting the KafkaStorageException to NotLeaderOrFollowerException in the response if FetchRequest version <= 5
+      // 如果 error 是 Errors.KAFKA_STORAGE_ERROR 并且当前请求的版本号 versionId 小于等于 5，则将错误类型转换为 Errors.NOT_LEADER_OR_FOLLOWER。
       if (error == Errors.KAFKA_STORAGE_ERROR && versionId <= 5) {
         Errors.NOT_LEADER_OR_FOLLOWER
       } else {

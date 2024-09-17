@@ -696,21 +696,22 @@ private[kafka] abstract class Acceptor(val socketServer: SocketServer, // Socket
     try {
       while (shouldRun.get()) { // 判断shouldRun状态
         try {
-          acceptNewConnections()
-          closeThrottledConnections()
+          acceptNewConnections() // 接收新的连接请求
+          closeThrottledConnections() // 关闭被限制的连接
         }
         catch {
           // We catch all the throwables to prevent the acceptor thread from exiting on exceptions due
           // to a select operation on a specific channel or a bad request. We don't want
           // the broker to stop responding to requests from other clients in these scenarios.
+          // 捕获所有异常，防止由于特定通道的选择操作或请求错误导致的线程退出
           case e: ControlThrowable => throw e
           case e: Throwable => error("Error occurred", e)
         }
       }
     } finally {
       debug("Closing server socket, selector, and any throttled sockets.")
-      CoreUtils.swallow(serverChannel.close(), this, Level.ERROR)
-      CoreUtils.swallow(nioSelector.close(), this, Level.ERROR)
+      CoreUtils.swallow(serverChannel.close(), this, Level.ERROR) // 关闭 serverChannel
+      CoreUtils.swallow(nioSelector.close(), this, Level.ERROR) // 关闭 nioSelector
       throttledSockets.foreach(throttledSocket => closeSocket(throttledSocket.socket, this))
       throttledSockets.clear()
     }
@@ -744,11 +745,11 @@ private[kafka] abstract class Acceptor(val socketServer: SocketServer, // Socket
    * Listen for new connections and assign accepted connections to processors using round-robin.
    */
   private def acceptNewConnections(): Unit = {
-    // 每500ms就获取一次就绪的I/O时间
+    // 每500ms就获取一次就绪的I/O事件
     val ready = nioSelector.select(500)
     // 如果有I/O时间准备就绪
     if (ready > 0) {
-      // 获取对应的SelectionKey集合
+      // 获取所有接收事件的SelectionKey实例
       val keys = nioSelector.selectedKeys()
       val iter = keys.iterator()
       // 遍历这些SelectionKey
@@ -756,9 +757,9 @@ private[kafka] abstract class Acceptor(val socketServer: SocketServer, // Socket
         try {
           val key = iter.next
           iter.remove()
-          // 测试SelectionKey的底层通道是否能够接收新Socket连接
+          // 检查事件是否是一个新的已经就绪可以被接受的连接,是否已经准备好写数据
           if (key.isAcceptable) {
-            // 接收此连接并分配对应Processor
+            // 调用accept方法创建SocketChannel连接
             accept(key).foreach { socketChannel =>
               // Assign the channel to the next processor (using round-robin) to which the
               // channel can be added without blocking. If newConnections queue is full on
@@ -771,13 +772,14 @@ private[kafka] abstract class Acceptor(val socketServer: SocketServer, // Socket
                 processor = synchronized {
                   // adjust the index (if necessary) and retrieve the processor atomically for
                   // correct behaviour in case the number of processors is reduced dynamically
+                  // 采用轮训的方式分配 processor
                   currentProcessorIndex = currentProcessorIndex % processors.length
+                  // 获取指定的 processor
                   processors(currentProcessorIndex)
                 }
                 // 更新Processor线程序号
                 currentProcessorIndex += 1
-                // 将新Socket连接加入的Processer线程处理连接队列
-                // 等待Processor线程后续处理
+                // assignNewConnection: 如果新连接的队列满了，一直阻塞直到最后一个处理器可以能够接收连接
               } while (!assignNewConnection(socketChannel, processor, retriesLeft == 0))
             }
           } else
@@ -1265,15 +1267,18 @@ private[kafka] class Processor(
 
   /**
    * Queue up a new connection for reading
+   * 将 socketChannel 加入到 newConnections 队列中，并唤醒 selector
    */
   def accept(socketChannel: SocketChannel,
              mayBlock: Boolean,
              acceptorIdlePercentMeter: com.yammer.metrics.core.Meter): Boolean = {
     val accepted = {
+      // offer 方法是非阻塞的
       if (newConnections.offer(socketChannel))
         true
       else if (mayBlock) {
         val startNs = time.nanoseconds
+        // put 方法是阻塞的
         newConnections.put(socketChannel)
         acceptorIdlePercentMeter.mark(time.nanoseconds() - startNs)
         true
@@ -1281,6 +1286,8 @@ private[kafka] class Processor(
         false
     }
     if (accepted)
+      // Selector 在调用 select 方法时会阻塞，直到有新的 I/O 事件发生。
+      // 当新的连接请求到来时，如果不唤醒 Selector，它将继续阻塞，无法及时响应新的连接请求。
       wakeup()
     accepted
   }

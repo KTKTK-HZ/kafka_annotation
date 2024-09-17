@@ -27,7 +27,8 @@ import org.apache.kafka.common.header.Header;
  */
 public interface Record {
 
-    Header[] EMPTY_HEADERS = new Header[0]; // 创建一个空的Header数组，用于存放一些头部信息
+    // 一个空的Header数组，用于表示没有头部信息的情况。
+    Header[] EMPTY_HEADERS = new Header[0];
 
     /**
      * The offset of this record in the log
@@ -37,9 +38,10 @@ public interface Record {
 
     /**
      * Get the sequence number assigned by the producer.
+     * 该方法用户获取生产者分配的序列号
      * @return the sequence number
      */
-    int sequence(); // 该方法用户获取生产者分配的序列号
+    int sequence();
 
     /**
      * Get the size in bytes of this record.
@@ -55,8 +57,9 @@ public interface Record {
 
     /**
      * Raise a {@link org.apache.kafka.common.errors.CorruptRecordException} if the record does not have a valid checksum.
+     * 校验 Record 的有效性，如果消息无效则抛出异常
      */
-    void ensureValid(); // 该方法用于检测记录的校验和是否有效。
+    void ensureValid();
 
     /**
      * Get the size in bytes of the key.

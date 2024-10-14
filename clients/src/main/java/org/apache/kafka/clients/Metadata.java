@@ -250,8 +250,11 @@ public class Metadata implements Closeable {
     }
 
     public synchronized void bootstrap(List<InetSocketAddress> addresses) {
+        // 由于此时生产者刚启动，本地缓存中的元数据是空的，因此先将 needFullUpdate 置为 true，即需要全部主题进行更新。
         this.needFullUpdate = true;
+        // 在初始化时将 updateVersion 置为 0，此时将版本更新+1。
         this.updateVersion += 1;
+        // 调用元数据缓存类 MetadataCache.bootstrap() 初始化元数据缓存。
         this.cache = MetadataCache.bootstrap(addresses);
     }
 

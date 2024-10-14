@@ -212,6 +212,7 @@ public class MetadataCache {
             nodes.put(nodeId, new Node(nodeId, address.getHostString(), address.getPort()));
             nodeId--;
         }
+        // 此时获取元数据被启动了，但是还未获取元首，所以元数据缓存都是空的集合
         return new MetadataCache(null, nodes, Collections.emptyList(),
                 Collections.emptySet(), Collections.emptySet(), Collections.emptySet(),
                 null, Collections.emptyMap(), Cluster.bootstrap(addresses));

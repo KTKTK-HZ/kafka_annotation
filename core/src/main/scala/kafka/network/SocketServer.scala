@@ -98,8 +98,9 @@ class SocketServer(val config: KafkaConfig,
   // data-plane
   private[network] val dataPlaneAcceptors = new ConcurrentHashMap[EndPoint, DataPlaneAcceptor]()
   val dataPlaneRequestChannel = new RequestChannel(maxQueuedRequests, DataPlaneAcceptor.MetricPrefix, time, apiVersionManager.newRequestMetrics)
-  // control-plane
+  // control-plane 负责处理控制类请求, 如果置空，则控制类请求由 data plane 处理
   private[network] var controlPlaneAcceptorOpt: Option[ControlPlaneAcceptor] = None
+  // 控制类请求数量远小于数据类，不需要创建线程池和较深的 requestChannel，此处 requestChannel 长度被硬编码为 20
   val controlPlaneRequestChannelOpt: Option[RequestChannel] = config.controlPlaneListenerName.map(_ =>
     new RequestChannel(20, ControlPlaneAcceptor.MetricPrefix, time, apiVersionManager.newRequestMetrics))
 
@@ -608,7 +609,7 @@ private[kafka] abstract class Acceptor(val socketServer: SocketServer, // Socket
   private[network] val localPort: Int  = if (endPoint.port != 0) {
     endPoint.port
   } else {
-    // Broker端创建对应的ServerSocketChannel实例，后续把该Channel向上一步的Selector中注册
+    // Broker端创建对应的ServerSocketChannel实例，后续在run 方法中将该Channel向上一步的Selector中注册
     serverChannel = openServerSocket(endPoint.host, endPoint.port, listenBacklogSize)
     val newPort = serverChannel.socket().getLocalPort()
     info(s"Opened wildcard endpoint ${endPoint.host}:${newPort}")
@@ -719,6 +720,7 @@ private[kafka] abstract class Acceptor(val socketServer: SocketServer, // Socket
 
   /**
    * Create a server socket to listen for connections on.
+   * 创建并配置一个 ServerSocketChannel，以便监听指定的主机地址和端口号上面的连接请求
    */
   private def openServerSocket(host: String, port: Int, listenBacklogSize: Int): ServerSocketChannel = {
     val socketAddress =
@@ -726,11 +728,14 @@ private[kafka] abstract class Acceptor(val socketServer: SocketServer, // Socket
         new InetSocketAddress(port)
       else
         new InetSocketAddress(host, port)
+    // 打开一个新的 ServerSocketChannel
     val serverChannel = ServerSocketChannel.open()
+    // 设置为非阻塞模式
     serverChannel.configureBlocking(false)
+    // 设置接收缓冲区大小
     if (recvBufferSize != Selectable.USE_DEFAULT_BUFFER_SIZE)
       serverChannel.socket().setReceiveBufferSize(recvBufferSize)
-
+    // 绑定端口号进行监听
     try {
       serverChannel.socket.bind(socketAddress, listenBacklogSize)
       info(s"Awaiting socket connections on ${socketAddress.getHostString}:${serverChannel.socket.getLocalPort}.")
@@ -1021,7 +1026,7 @@ private[kafka] class Processor(
       while (shouldRun.get()) {
         try {
           // setup any new connections that have been queued up
-          configureNewConnections() // 创建新链接
+          configureNewConnections() // 从 newConnnections 队列中获取新连接，并注册到selector上
           // register any new responses for writing
           processNewResponses() // 发送Response，并将Response放进inflightResponse临时队列
           poll() // 执行NIO poll，获取对应SocketChannel上准备就绪的I/O操作
@@ -1060,12 +1065,15 @@ private[kafka] class Processor(
     processException(errorMessage, throwable)
   }
 
+  // 负责发送 Response 给 Request 发送方，并且将 Response 放入临时 Response 队列
   private def processNewResponses(): Unit = {
     var currentResponse: RequestChannel.Response = null
+    // 读取responseQueue，处理所有返回
     while ({currentResponse = dequeueResponse(); currentResponse != null}) {
       val channelId = currentResponse.request.context.connectionId
       try {
         currentResponse match {
+          // 无需发送Response
           case response: NoOpResponse =>
             // There is no response to send to the client, we need to read more pipelined requests
             // that are sitting in the server's socket buffer
@@ -1075,10 +1083,13 @@ private[kafka] class Processor(
             // it will be unmuted immediately. If the channel has been throttled, it will be unmuted only if the
             // throttling delay has already passed by now.
             handleChannelMuteEvent(channelId, ChannelMuteEvent.RESPONSE_SENT)
+            // 空请求说明此请求处理完了，此时unmute此KafkaChannel，开始接受请求
             tryUnmuteChannel(channelId)
-
+          // 发送Response并将Response放入inflightResponses
           case response: SendResponse =>
+            // 注意这里只是将responseSend注册为KafkaChannel的待发送Send并向SelectionKey注册OP_WRITE事件
             sendResponse(response, response.responseSend)
+          // 关闭对应的连接
           case response: CloseConnectionResponse =>
             updateRequestMetrics(response)
             trace("Closing socket connection actively according to the response code.")
@@ -1112,19 +1123,26 @@ private[kafka] class Processor(
     // Invoke send for closingChannel as well so that the send is failed and the channel closed properly and
     // removed from the Selector after discarding any pending staged receives.
     // `openOrClosingChannel` can be None if the selector closed the connection because it was idle for too long
+    // 如果该连接处于可连接状态
     if (openOrClosingChannel(connectionId).isDefined) {
+      // 发送Response
       selector.send(new NetworkSend(connectionId, responseSend))
+      // 将Response加入到inflightResponses队列
       inflightResponses += (connectionId -> response)
     }
   }
 
   private def poll(): Unit = {
+    // 如果没有新连接请求时，轮询操作会等待一段时间（300ms），以便处理其他 I/O 事件
     val pollTimeout = if (newConnections.isEmpty) 300 else 0
+    // 在底层，它实际上调用的是Java NIO Selector的select方法去执行那些准备就绪的I/O 操作，
+    //不管是接收 Request，还是发送 Response。poll方法才是真正执行 I/O 操作逻辑的地方。
     try selector.poll(pollTimeout)
     catch {
       case e @ (_: IllegalStateException | _: IOException) =>
         // The exception is not re-thrown and any completed sends/receives/connections/disconnections
         // from this poll will be processed.
+        // 异常不会再向上层抛出，这意味着即使发生异常，任何已经完成的发送、接收、连接或断开操作仍会被处理
         error(s"Processor $id poll failed", e)
     }
   }
@@ -1296,10 +1314,13 @@ private[kafka] class Processor(
    * Register any new connections that have been queued up. The number of connections processed
    * in each iteration is limited to ensure that traffic and connection close notifications of
    * existing channels are handled promptly.
+   * 该方法的主要逻辑是调用selector的register来注册SocketChannel
    */
   private def configureNewConnections(): Unit = {
     var connectionsProcessed = 0
+    // 如果没超配额并且有待处理新连接,connectionQueueSize 固定值：20
     while (connectionsProcessed < connectionQueueSize && !newConnections.isEmpty) {
+      // 从 newconnections 队列中取出 socketChannel
       val channel = newConnections.poll()
       try {
         debug(s"Processor $id listening to new connection from ${channel.socket.getRemoteSocketAddress}")

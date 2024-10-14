@@ -52,14 +52,14 @@ public final class ClientRequest {
                          boolean expectResponse,
                          int requestTimeoutMs,
                          RequestCompletionHandler callback) {
-        this.destination = destination;
-        this.requestBuilder = requestBuilder;
-        this.correlationId = correlationId;
+        this.destination = destination; // 目标 Broker
+        this.requestBuilder = requestBuilder; // 通过 requestBuilder 给不同类型的请求设置不同的请求内容
+        this.correlationId = correlationId; // 请求头的 correlationId
         this.clientId = clientId;
         this.createdTimeMs = createdTimeMs;
-        this.expectResponse = expectResponse;
-        this.requestTimeoutMs = requestTimeoutMs;
-        this.callback = callback;
+        this.expectResponse = expectResponse; // 消息发送后是否需要进行响应
+        this.requestTimeoutMs = requestTimeoutMs; // 请求的超时时间
+        this.callback = callback; // 回调函数
     }
 
     @Override

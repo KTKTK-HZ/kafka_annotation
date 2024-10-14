@@ -308,6 +308,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
      *                         be called in the producer when the serializer is passed in directly.
      */
     public KafkaProducer(Map<String, Object> configs, Serializer<K> keySerializer, Serializer<V> valueSerializer) {
+        // 生产者配置初始化并对 KafkaProducer 进行重载
         this(new ProducerConfig(ProducerConfig.appendSerializerToConfig(configs, keySerializer, valueSerializer)),
                 keySerializer, valueSerializer, null, null, null, Time.SYSTEM);
     }
@@ -365,14 +366,14 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                   ProducerInterceptors<K, V> interceptors,
                   Time time) {
         try {
-            this.producerConfig = config;
+            this.producerConfig = config; // 生产者配置
             this.time = time;
-            //获取transactional ID，其保证会话的可靠性，如果配置表示启用幂等+事务,默认为 null
+            //获取transactional ID，其保证会话的可靠性，如果配置表示启用幂等事务,默认为 null
             String transactionalId = config.getString(ProducerConfig.TRANSACTIONAL_ID_CONFIG);
             //获取client ID，如果用户没有设置，默认为 producer-(transactionalId)-自增序号
             this.clientId = config.getString(ProducerConfig.CLIENT_ID_CONFIG);
 
-            //日志相关
+            // 根据事务Id 是否配置来记录不同的日志
             LogContext logContext;
             if (transactionalId == null)
                 logContext = new LogContext(String.format("[Producer clientId=%s] ", clientId));
@@ -433,7 +434,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                 this.interceptors = interceptors;
             else
                 this.interceptors = new ProducerInterceptors<>(interceptorList);
-            // 集群资源监听器，当实例想获得元数据变更时需要实现ClusterResourceListener，例如keySerializer，interceptor等，当集群资源变化时
+            // 集群资源监听器，当实例想获得元数据变更时需要实现ClusterResourceListener，例如在keySerializer，interceptor中进行实现，当集群资源变化时
             // 集群资源监听器将会使用onUpdate进行通知
             ClusterResourceListeners clusterResourceListeners = configureClusterResourceListeners(this.keySerializer,
                     this.valueSerializer, interceptorList, reporters);
@@ -446,7 +447,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
             int deliveryTimeoutMs = configureDeliveryTimeout(config, log); // 消息投递的超时时间
 
             this.apiVersions = new ApiVersions();
-            this.transactionManager = configureTransactionState(config, logContext);
+            this.transactionManager = configureTransactionState(config, logContext); // 事务管理器
             // 自适应分区设置，There is no need to do work required for adaptive partitioning, if we use a custom partitioner.
             boolean enableAdaptivePartitioning = partitioner == null &&
                 config.getBoolean(ProducerConfig.PARTITIONER_ADPATIVE_PARTITIONING_ENABLE_CONFIG);
@@ -485,15 +486,15 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                 this.metadata = metadata;
             } else {
                 //metadata.max.age.ms 默认值5分钟，生产者隔多久需要更新一下自己的元数据
-                //metadata.max.idle.ms 默认值5分钟，网路最多空闲时间设置，超过该阈值，就关闭网络
-                //初始化集群元数据
+                //metadata.max.idle.ms 默认值5分钟，本地缓存中某 Topic 的元数据一定时间没有被访问将会被删除，默认为 5 分钟
+                //初始化集群元数据，仅仅构建对象，尚未从集群中拉取
                 this.metadata = new ProducerMetadata(retryBackoffMs,
                         config.getLong(ProducerConfig.METADATA_MAX_AGE_CONFIG),
                         config.getLong(ProducerConfig.METADATA_MAX_IDLE_CONFIG),
                         logContext,
                         clusterResourceListeners,
                         Time.SYSTEM);
-                //启动metadata引导程序，此时metadata里没有具体的元数据信息
+                //启动metadata引导程序，此时metadata里没有具体的元数据信息，因为客户端拉取元数据需要唤醒 Sender 线程进行拉取
                 this.metadata.bootstrap(addresses);
             }
             this.errors = this.metrics.sensor("errors");
@@ -554,11 +555,15 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
 
     // visible for testing
     Sender newSender(LogContext logContext, KafkaClient kafkaClient, ProducerMetadata metadata) {
+        // 发送数据的时候，允许有多个网络连接(比如连接到 broker0、broker1)，每个网络连接可以忍受producer发送给broker后，消息没有响应的个数
+        // 因为kafka有重试机制，所以有可能会造成数据乱序，如果想要保证有序，需要把这个值设置为1
         int maxInflightRequests = producerConfig.getInt(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION);
         int requestTimeoutMs = producerConfig.getInt(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG);
         ChannelBuilder channelBuilder = ClientUtils.createChannelBuilder(producerConfig, time, logContext);
         ProducerMetrics metricsRegistry = new ProducerMetrics(this.metrics);
         Sensor throttleTimeSensor = Sender.throttleTimeSensor(metricsRegistry.senderMetrics);
+        //初始化网络请求组件
+        //connections.max.idle.ms 默认9分钟，一个网络请求最长空闲时间，超过空闲时间，关闭请求
         KafkaClient client = kafkaClient != null ? kafkaClient : new NetworkClient(
                 new Selector(producerConfig.getLong(ProducerConfig.CONNECTIONS_MAX_IDLE_MS_CONFIG),
                         this.metrics, time, "producer", channelBuilder, logContext),

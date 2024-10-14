@@ -102,6 +102,7 @@ public class Selector implements Selectable, AutoCloseable {
     }
 
     private final Logger log;
+    // 在 Java NIO 中用来监听网络I/O事件
     private final java.nio.channels.Selector nioSelector;
     private final Map<String, KafkaChannel> channels;
     private final Set<KafkaChannel> explicitlyMutedChannels;
@@ -247,18 +248,29 @@ public class Selector implements Selectable, AutoCloseable {
      */
     @Override
     public void connect(String id, InetSocketAddress address, int sendBufferSize, int receiveBufferSize) throws IOException {
+        // 1、先确认是否已经被连接过
         ensureNotRegistered(id);
+        // DatagramChannel: 通过 UDP 读写网络中数据；
+        // SocketChannel: 通过 TCP 读写网络中数据；
+        // ServerSocketChannel: 可以监听新进来的 TCP 连接，对每一个新进来的连接都会创建一个 SocketChannel
+        // 2、打开一个 SocketChannel
         SocketChannel socketChannel = SocketChannel.open();
         SelectionKey key = null;
         try {
+            // 3、设置 socketChannel 信息
             configureSocketChannel(socketChannel, sendBufferSize, receiveBufferSize);
+            // 4、尝试发起连接
             boolean connected = doConnect(socketChannel, address);
+            // Selector 发起网络连接的时候进行「OP_CONNECT」事件注册
+            // 5、将该 socketChannel 注册到 nioSelector 上，并关注 OP_CONNECT 事件
             key = registerChannel(id, socketChannel, SelectionKey.OP_CONNECT);
-
+            // 如果连接成功了
             if (connected) {
                 // OP_CONNECT won't trigger for immediately connected channels
                 log.debug("Immediately connected to node {}", id);
+                // 先将 key 放入 immediatelyConnectedKeys 集合
                 immediatelyConnectedKeys.add(key);
+                // 并取消对 OP_CONNECT 的监听
                 key.interestOps(0);
             }
         } catch (IOException | RuntimeException e) {
@@ -274,6 +286,10 @@ public class Selector implements Selectable, AutoCloseable {
     // in order to simulate "immediately connected" sockets.
     protected boolean doConnect(SocketChannel channel, InetSocketAddress address) throws IOException {
         try {
+            // 调用socketChannel的connect方法进行发起连接，该方法会向远端发起tcp请求
+            // 因为是非阻塞的，返回时，连接不一定已经建立好（即完成3次握手）。连接如果已经建立好则返回true，否则返回false。
+            // 一般来说server和client在一台机器上，该方法可能返回true。
+            // 在后面会通过 KSelector.finishConnect() 方法确认连接是否真正建立了。
             return channel.connect(address);
         } catch (UnresolvedAddressException e) {
             throw new IOException("Can't resolve address: " + address, e);
@@ -382,16 +398,18 @@ public class Selector implements Selectable, AutoCloseable {
     /**
      * Queue the given request for sending in the subsequent {@link #poll(long)} calls
      * @param send The request to send
+     * 消息预发送，即在发送的时候把消息先暂存在 KafkaChannel 的 send 字段里，然后等着 poll() 执行真正的发送
      */
     public void send(NetworkSend send) {
-        String connectionId = send.destinationId();
-        KafkaChannel channel = openOrClosingChannelOrFail(connectionId);
+        String connectionId = send.destinationId(); // 从服务端获取 connectionId
+        KafkaChannel channel = openOrClosingChannelOrFail(connectionId); // 从数据包中获取对应连接
+        // 如果关闭集合中包含该连接
         if (closingChannels.containsKey(connectionId)) {
             // ensure notification via `disconnected`, leave channel in the state in which closing was triggered
             this.failedSends.add(connectionId);
         } else {
             try {
-                channel.setSend(send);
+                channel.setSend(send); // 暂存数据预发送，并没有真正的发送
             } catch (Exception e) {
                 // update the state for consistency, the channel will be discarded after `close`
                 channel.state(ChannelState.FAILED_SEND);
@@ -442,7 +460,7 @@ public class Selector implements Selectable, AutoCloseable {
             throw new IllegalArgumentException("timeout should be >= 0");
 
         boolean madeReadProgressLastCall = madeReadProgressLastPoll;
-        clear();
+        clear(); // 先将上次的结果清理掉
 
         boolean dataInBuffers = !keysWithBufferedRead.isEmpty();
 
@@ -462,11 +480,14 @@ public class Selector implements Selectable, AutoCloseable {
 
         /* check ready keys */
         long startSelect = time.nanoseconds();
+        // 2. 调用nioSelector.select线程阻塞等待I/O事件并设置阻塞时间，
+        // 等待I/O事件就绪发生，然后返回已经监控到了多少准备就绪的事件
         int numReadyKeys = select(timeout);
         long endSelect = time.nanoseconds();
         this.sensors.selectTime.record(endSelect - startSelect, time.milliseconds(), false);
-
+        // 3. 监听到事件发生或立即连接集合不为空或存在缓存数据
         if (numReadyKeys > 0 || !immediatelyConnectedKeys.isEmpty() || dataInBuffers) {
+            // 4. 获取监听到的准备就绪事件集合
             Set<SelectionKey> readyKeys = this.nioSelector.selectedKeys();
 
             // Poll from channels that have buffered data (but nothing more from the underlying socket)
@@ -478,11 +499,14 @@ public class Selector implements Selectable, AutoCloseable {
             }
 
             // Poll from channels where the underlying socket has more data
+            // 5. 处理监听到的准备就绪事件
             pollSelectionKeys(readyKeys, false, endSelect);
             // Clear all selected keys so that they are excluded from the ready count for the next select
+            // 6. 就绪事件集合清理
             readyKeys.clear();
-
+            // 7. 处理立即连接集合
             pollSelectionKeys(immediatelyConnectedKeys, true, endSelect);
+            // 8. 立即连接集合清理
             immediatelyConnectedKeys.clear();
         } else {
             madeReadProgressLastPoll = true; //no work is also "progress"
@@ -571,9 +595,10 @@ public class Selector implements Selectable, AutoCloseable {
 
                 //if channel is ready and has bytes to read from socket or buffer, and has no
                 //previous completed receive then read from it
+                // 读事件是否准备就绪了
                 if (channel.ready() && (key.isReadable() || channel.hasBytesBuffered()) && !hasCompletedReceive(channel)
                         && !explicitlyMutedChannels.contains(channel)) {
-                    attemptRead(channel);
+                    attemptRead(channel); // 尝试处理读事件
                 }
 
                 if (channel.hasBytesBuffered() && !explicitlyMutedChannels.contains(channel)) {
@@ -590,6 +615,7 @@ public class Selector implements Selectable, AutoCloseable {
 
                 long nowNanos = channelStartTimeNanos != 0 ? channelStartTimeNanos : currentTimeNanos;
                 try {
+                    // 尝试处理写事件
                     attemptWrite(key, channel, nowNanos);
                 } catch (Exception e) {
                     sendFailed = true;
@@ -634,22 +660,30 @@ public class Selector implements Selectable, AutoCloseable {
                 && channel.ready()
                 && key.isWritable()
                 && !channel.maybeBeginClientReauthentication(() -> nowNanos)) {
+            // 进行写操作
             write(channel);
         }
     }
 
     // package-private for testing
+    // 执行写操作
     void write(KafkaChannel channel) throws IOException {
+        // 1.获取 channel 对应的节点id
         String nodeId = channel.id();
+        // 2. 将保存在 send 上的数据真正发送出去，但是一次不一定能发送完，会返回已经发出的字节数
         long bytesSent = channel.write();
+        // 3. 判断是否发送完成，未完成返回null，等待下次poll继续发送
         NetworkSend send = channel.maybeCompleteSend();
         // We may complete the send with bytesSent < 1 if `TransportLayer.hasPendingWrites` was true and `channel.write()`
         // caused the pending writes to be written to the socket channel buffer
+        // 4. 说明已经发出或者发送完成
         if (bytesSent > 0 || send != null) {
             long currentTimeMs = time.milliseconds();
             if (bytesSent > 0)
                 this.sensors.recordBytesSent(nodeId, bytesSent, currentTimeMs);
+            // 发送完成
             if (send != null) {
+                // 将 send 添加到 completedSends
                 this.completedSends.add(send);
                 this.sensors.recordCompletedSend(nodeId, send.size(), currentTimeMs);
             }
@@ -670,14 +704,15 @@ public class Selector implements Selectable, AutoCloseable {
 
     private void attemptRead(KafkaChannel channel) throws IOException {
         String nodeId = channel.id();
-
+        // 将从传输层中读取数据到NetworkReceive对象中
         long bytesReceived = channel.read();
         if (bytesReceived != 0) {
             long currentTimeMs = time.milliseconds();
             sensors.recordBytesReceived(nodeId, bytesReceived, currentTimeMs);
             madeReadProgressLastPoll = true;
-
+            // 判断 NetworkReceive 对象是否已经读完了
             NetworkReceive receive = channel.maybeCompleteReceive();
+            // 当读完后把这个 NetworkReceive 对象添加到已经接收完毕网络请求集合里
             if (receive != null) {
                 addToCompletedReceives(channel, receive, currentTimeMs);
             }
@@ -1048,6 +1083,7 @@ public class Selector implements Selectable, AutoCloseable {
      * adds a receive to completed receives
      */
     private void addToCompletedReceives(KafkaChannel channel, NetworkReceive networkReceive, long currentTimeMs) {
+        // 将 channel id 添加到已经接收完毕的网络请求集合中
         if (hasCompletedReceive(channel))
             throw new IllegalStateException("Attempting to add second completed receive to channel " + channel.id());
 

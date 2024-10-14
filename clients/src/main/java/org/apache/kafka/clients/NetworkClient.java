@@ -292,12 +292,14 @@ public class NetworkClient implements KafkaClient {
     public boolean ready(Node node, long now) {
         if (node.isEmpty())
             throw new IllegalArgumentException("Cannot connect to empty node " + node);
-
+        // 判断节点是否已经做好准备
         if (isReady(node, now))
             return true;
-
+        // 判断节点的连接状态
         if (connectionStates.canConnect(node.idString(), now))
             // if we are interested in sending to a node and we don't have a connection to it, initiate one
+            // 初始化连接，但此时不一定连接成功了
+            // 第一次进来时候虽然init了网络，然后还是return false
             initiateConnect(node, now);
 
         return false;
@@ -478,7 +480,9 @@ public class NetworkClient implements KafkaClient {
     }
 
     private void doSend(ClientRequest clientRequest, boolean isInternalRequest, long now) {
+        // 确定连接是否还活跃
         ensureActive();
+        // 远程主机，目标节点id
         String nodeId = clientRequest.destination();
         if (!isInternalRequest) {
             // If this request came from outside the NetworkClient, validate
@@ -487,6 +491,8 @@ public class NetworkClient implements KafkaClient {
             // will be slightly different for some internal requests (for
             // example, ApiVersionsRequests can be sent prior to being in
             // READY state.)
+            // 检测是否可以向指定 Node 发送请求，如果还不能发送请求则抛异常
+            // 如果是非内部请求，检查connectionState是否ready、Channel是否ready、是否达到发送中上限
             if (!canSendRequest(nodeId, now))
                 throw new IllegalStateException("Attempt to send a request to node " + nodeId + " which is not ready.");
         }
@@ -526,13 +532,17 @@ public class NetworkClient implements KafkaClient {
     }
 
     private void doSend(ClientRequest clientRequest, boolean isInternalRequest, long now, AbstractRequest request) {
-        String destination = clientRequest.destination();
-        RequestHeader header = clientRequest.makeHeader(request.version());
+        String destination = clientRequest.destination(); // 目标
+        RequestHeader header = clientRequest.makeHeader(request.version()); // 请求头
         if (log.isDebugEnabled()) {
             log.debug("Sending {} request with header {} and timeout {} to node {}: {}",
                 clientRequest.apiKey(), header, clientRequest.requestTimeoutMs(), destination, request);
         }
+        // 封装send对象，封装了目的地和header生成的byteBuffer对象
+        // 1、构建 NetworkSend 对象 结合请求头和请求体，序列化数据，保存到 NetworkSend
         Send send = request.toSend(header);
+        // 基于clientRequest构建InflightRequest对象
+        // 2、构建 inFlightRequest 对象 保存了发送前的所有信息
         InFlightRequest inFlightRequest = new InFlightRequest(
                 clientRequest,
                 header,
@@ -540,7 +550,12 @@ public class NetworkClient implements KafkaClient {
                 request,
                 send,
                 now);
+        // 3、把 inFlightRequest 加入 inFlightRequests 集合里
+        // 把InFlightRequest添加到inFlightRequests中，InFlightRequests中按照node的id存储InFlightRequest的队列
         this.inFlightRequests.add(inFlightRequest);
+        /** 写事件 把send请求加入队列等待随后的poll方法把它发送出去,IO前最后的准备*/
+        // 4、调用 Selector 异步发送数据，并将 send 和对应 kafkaChannel 绑定起来，并开启该 kafkaChannel 底层
+        // socket 的写事件，等待下一步真正的网络发送
         selector.send(new NetworkSend(clientRequest.destination(), send));
     }
 
@@ -565,9 +580,11 @@ public class NetworkClient implements KafkaClient {
             completeResponses(responses);
             return responses;
         }
-
+        // 1、尝试更新元数据:封装了一个要拉取的元数据请求 ，目前还并没有将请求发送出去
         long metadataTimeout = metadataUpdater.maybeUpdate(now);
         try {
+            // 2、发送请求、进行复杂的网络操作
+            // 执行网络 I/O 操作，真正读写发送的地方，如果客户端的请求被完整的处理过了，会加入到completeSends 或 complteReceives 集合中
             this.selector.poll(Utils.min(timeout, metadataTimeout, defaultRequestTimeoutMs));
         } catch (IOException e) {
             log.error("Unexpected error during I/O", e);
@@ -575,14 +592,22 @@ public class NetworkClient implements KafkaClient {
 
         // process completed actions
         long updatedNow = this.time.milliseconds();
+        // 响应结果集合：真正的读写操作, 会生成responses
         List<ClientResponse> responses = new ArrayList<>();
+        // 3、完成发送的handler，处理 completedSends 集合
         handleCompletedSends(responses, updatedNow);
+        // 4、完成接收的handler，处理 completedReceives 队列
         handleCompletedReceives(responses, updatedNow);
+        // 5、断开连接的handler，处理 disconnected 列表
         handleDisconnections(responses, updatedNow);
+        // 6、处理连接的handler，处理 connected 列表
         handleConnections();
+        // 7、处理版本协调请求（获取api版本号） handler
         handleInitiateApiVersionRequests(updatedNow);
+        // 8、超时请求的handler，处理超时请求集合
         handleTimedOutConnections(responses, updatedNow);
         handleTimedOutRequests(responses, updatedNow);
+        // 9、完成响应回调
         completeResponses(responses);
 
         return responses;
@@ -872,10 +897,15 @@ public class NetworkClient implements KafkaClient {
      */
     private void handleCompletedSends(List<ClientResponse> responses, long now) {
         // if no response is expected then when the send is completed, return it
+        /** 遍历 completedSends 发送完成的请求集合，通过调用 Selector 获取从上一次 poll 开始的请求 */
         for (NetworkSend send : this.selector.completedSends()) {
+            /** 从 inFlightRequests 集合获取该 Send 关联对应 Node 的队列取出最新的请求，但并没有从队列中删除，取出后判断这个请求是否期望得到响应 */
             InFlightRequest request = this.inFlightRequests.lastSent(send.destinationId());
+            /** 是否需要响应, 如果不需要响应,当Send请求完成时,就直接返回.还是有request.completed生成的ClientResponse对象 */
             if (!request.expectResponse) {
+                /** 如果不需要响应就取出 inFlightRequests 中该 Sender 关联对应 Node 的 inFlightRequest，即提取最新的请求 */
                 this.inFlightRequests.completeLastSent(send.destinationId());
+                /** 调用 completed() 生成 ClientResponse,第一个参数为null,表示没有响应内容,把请求添加到 Responses 集合 */
                 responses.add(request.completed(null, now));
             }
         }
@@ -906,10 +936,13 @@ public class NetworkClient implements KafkaClient {
      * @param now The current time
      */
     private void handleCompletedReceives(List<ClientResponse> responses, long now) {
+        /** 1、遍历 CompletedReceives 响应集合，通过 Selector 返回未处理的响应 */
         for (NetworkReceive receive : this.selector.completedReceives()) {
             String source = receive.source();
+            // 3、从 inFlightRequests 集合队列获取已发送请求「最老的请求」并删除（从 inFlightRequests 删除，因为inFlightRequests
+            // 存储的是未收到请求响应的 ClientRequest，现在请求已经有响应了，就不需要保存了）
             InFlightRequest req = inFlightRequests.completeNext(source);
-
+            // 解析响应，并验证头部
             AbstractResponse response = parseResponse(receive.payload(), req.header);
             if (throttleTimeSensor != null)
                 throttleTimeSensor.record(response.throttleTimeMs(), now);
@@ -922,10 +955,13 @@ public class NetworkClient implements KafkaClient {
             // If the received response includes a throttle delay, throttle the connection.
             maybeThrottle(response, req.header.apiVersion(), req.destination, now);
             if (req.isInternalRequest && response instanceof MetadataResponse)
+                // 如果是MetadataResponse类的响应，由metadataUpdater来处理
                 metadataUpdater.handleSuccessfulResponse(req.header, now, (MetadataResponse) response);
             else if (req.isInternalRequest && response instanceof ApiVersionsResponse)
+                // 如果是版本协调的响应
                 handleApiVersionsResponse(responses, req, now, (ApiVersionsResponse) response);
             else
+                //普通发送消息的响应，通过 InFlightRequest.completed()，生成 ClientResponse，将响应添加到 responses 集合中
                 responses.add(req.completed(response, now));
         }
     }
@@ -1026,9 +1062,14 @@ public class NetworkClient implements KafkaClient {
     private void initiateConnect(Node node, long now) {
         String nodeConnectionId = node.idString();
         try {
+            // 更新连接状态为正在连接,新建NodeConnectionState并设置链接状态为CONNECTING
             connectionStates.connecting(nodeConnectionId, now, node.host());
+            // 设置node ip,获取连接地址
             InetAddress address = connectionStates.currentAddress(nodeConnectionId);
             log.debug("Initiating connection to node {} using address {}", node, address);
+            // 调用 selector 尝试异步进行连接，后续通过selector.poll进行监听事件就绪
+            // selector.connect() 异步发起连接，此时不一定连接上了，后续 Selector.poll() 会监听连接是否准备好并完成连接，
+            // 如果连接成功，则会将  ConnectionState 设置为 CONNECTED
             selector.connect(nodeConnectionId,
                     new InetSocketAddress(address, node.port()),
                     this.socketSendBuffer,

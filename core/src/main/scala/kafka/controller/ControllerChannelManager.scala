@@ -393,7 +393,7 @@ abstract class AbstractControllerBrokerRequestBatch(config: KafkaConfig,
       throw new IllegalStateException("Controller to broker state change requests batch is not empty while creating a " +
         s"new one. Some UpdateMetadata state changes to brokers $updateMetadataRequestBrokerSet with partition info " +
         s"$updateMetadataRequestPartitionInfoMap might be lost ")
-    metadataInstance = metadataProvider()
+    metadataInstance = metadataProvider() // 运行函数字面量metadataProvider获取现在的元数据
   }
 
   def clear(): Unit = {

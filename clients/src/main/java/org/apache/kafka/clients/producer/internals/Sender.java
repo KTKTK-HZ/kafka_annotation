@@ -241,7 +241,7 @@ public class Sender implements Runnable {
         // main loop, runs until close is called
         while (running) {
             try {
-                //Sender 线程在运行状态下主要的业务处理方法，将消息缓存区中的消息向 broker 发送
+                // runOnce()方法是 Sender 线程的一个执行周期，在这个周期中会进行一次批量的请求发送，也会进行一次响应的处理
                 runOnce();
             } catch (Exception e) {
                 log.error("Uncaught error in kafka producer I/O thread: ", e);
@@ -326,8 +326,9 @@ public class Sender implements Runnable {
         }
 
         long currentTimeMs = time.milliseconds();
+        // 将数据放到 KafkaChannel 的 send 字段中，并创建发送到 Kafka 集群的请求
         long pollTimeout = sendProducerData(currentTimeMs);
-        // 该行代码完成了真正的元数据的拉取
+        // 真正执行网络 IO 的地方，会将请求发出，并对收到的响应进行处理
         client.poll(pollTimeout, currentTimeMs);
     }
 
@@ -346,9 +347,7 @@ public class Sender implements Runnable {
         RecordAccumulator.ReadyCheckResult result = this.accumulator.ready(cluster, now);
 
         // if there are any partitions whose leaders are not known yet, force metadata update
-        /**
-         * 判断需要发送的数据，是否有哪一个partition没有设置leader，如果有需要强制更新
-         */
+        // 判断需要发送的数据，是否有哪一个partition没有 leader 信息，如果有则需要更新元数据
         if (!result.unknownLeaderTopics.isEmpty()) {
             // The set of topics with unknown leader contains topics with leader election pending as well as
             // topics which may have expired. Add the topic again to metadata to ensure it is included
@@ -367,14 +366,14 @@ public class Sender implements Runnable {
         long notReadyTimeout = Long.MAX_VALUE;
         while (iter.hasNext()) {
             Node node = iter.next();
-            // 检查网络是否已经建立好
+            // 检查与指定 Broker 的网络连接是否已经建立完成并准备就绪（网络是否已经连接，channel 是否准备就绪，已发送但未响应的请求数量是否已经达到上限），如果没有建立，则尝试初始化网络连接
             if (!this.client.ready(node, now)) {
                 // Update just the readyTimeMs of the latency stats, so that it moves forward
                 // every time the batch is ready (then the difference between readyTimeMs and
                 // drainTimeMs would represent how long data is waiting for the node).
                 // 如果网络连接状态没有建立好
                 this.accumulator.updateNodeLatencyStats(node.id(), now, false);
-                // 移除掉result中需要发送给broker的数据
+                // 不合适发送请求的 Broker 从 readyNode 中移除
                 iter.remove();
                 notReadyTimeout = Math.min(notReadyTimeout, this.client.pollDelayMs(node, now));
             } else {
@@ -392,9 +391,16 @@ public class Sender implements Runnable {
          */
 
         Map<Integer, List<ProducerBatch>> batches = this.accumulator.drain(cluster, result.readyNodes, this.maxRequestSize, now);
-        // 增加到 inFlightBatches 发送中队列
+        // 将待发送的 ProducerBatch 发送记录到 inFlightBatches 集合中，这个集合中记录了已发送但是未响应的 ProducerBatch
         addToInflightBatches(batches);
-        // 保证消息顺序
+        /**
+         * 这里会检查 guaranteeMessageOrder 字段，它与 max.in.flight.requests.per.connection 配置相关。
+         * 从名字就可以看出，max.in.flight.requests.per.connection 是用来控制每个网络连接用来 inflight （发送但未响应）的请求个数。
+         * 如果该配置设置为 1 的话，就会实现 KafkaProducer 逐个发送请求的效果，此时的 guaranteeMessageOrder 就为 true。
+         * 此时，Sender 线程发送完一个请求之后，就会将目标 partition 加入到 RecordAccumulator.muted 集合中，之后再调用 ready() 方法以及 drain() 方法的时候，
+         * 都会忽略发往 muted 集合 partition 的数据。当请求返回的时候，KafkaProducer 会将相关 partition 从 muted 集合中删除，也就可以继续向目标 partition 发送数据了。
+         * 从而可以保证消息的有序性
+         * */
         if (guaranteeMessageOrder) {
             // Mute all the partitions drained
             for (List<ProducerBatch> batchList : batches.values()) {

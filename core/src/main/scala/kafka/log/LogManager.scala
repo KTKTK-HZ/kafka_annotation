@@ -342,6 +342,7 @@ class LogManager(logDirs: Seq[File],
   private[log] def loadLogs(defaultConfig: LogConfig, topicConfigOverrides: Map[String, LogConfig]): Unit = {
     info(s"Loading logs from log dirs $liveLogDirs")
     val startMs = time.hiResClockMs()
+    // 每个数据目录在加载时都会创建一个线程池
     val threadPools = ArrayBuffer.empty[ExecutorService]
     val offlineDirs = mutable.Set.empty[(String, IOException)]
     val jobs = ArrayBuffer.empty[Seq[Future[_]]]
@@ -352,11 +353,14 @@ class LogManager(logDirs: Seq[File],
     val numRemainingSegments: ConcurrentMap[String, Int] = new ConcurrentHashMap[String, Int]
 
     def handleIOException(logDirAbsolutePath: String, e: IOException): Unit = {
+      // 将发生异常的日志目录及其异常对象添加到 offlineDirs 集合中
       offlineDirs.add((logDirAbsolutePath, e))
+      // 记录一条错误日志，包含日志目录路径和异常信息
       error(s"Error while loading log dir $logDirAbsolutePath", e)
     }
 
     val uncleanLogDirs = mutable.Buffer.empty[String]
+    // 遍历所有活动的日志目录
     for (dir <- liveLogDirs) {
       val logDirAbsolutePath = dir.getAbsolutePath
       var hadCleanShutdown: Boolean = false
@@ -366,6 +370,7 @@ class LogManager(logDirs: Seq[File],
         threadPools.append(pool)
 
         val cleanShutdownFile = new File(dir, LogLoader.CleanShutdownFile)
+        // 检查是否存在干净关机标志文件（CleanShutdownFile），如果存在则删除该文件，并记录为干净关机
         if (cleanShutdownFile.exists) {
           // Cache the clean shutdown status and use that for rest of log loading workflow. Delete the CleanShutdownFile
           // so that if broker crashes while loading the log, it is considered hard shutdown during the next boot up. KAFKA-10471
@@ -374,6 +379,7 @@ class LogManager(logDirs: Seq[File],
         }
 
         var recoveryPoints = Map[TopicPartition, Long]()
+        // 读取恢复点检查点文件和日志起始偏移量检查点文件，如果读取失败则进行相应的错误处理
         try {
           recoveryPoints = this.recoveryPointCheckpoints(dir).read()
         } catch {
@@ -391,6 +397,7 @@ class LogManager(logDirs: Seq[File],
               s"$logDirAbsolutePath, resetting to the base offset of the first segment", e)
         }
 
+        // 扫描目录以找到所有需要加载的日志文件夹，并记录日志总数
         val logsToLoad = Option(dir.listFiles).getOrElse(Array.empty).filter(logDir =>
           logDir.isDirectory &&
             // Ignore remote-log-index-cache directory as that is index cache maintained by tiered storage subsystem

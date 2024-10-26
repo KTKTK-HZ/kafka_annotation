@@ -54,9 +54,9 @@ import scala.math._
  */
 abstract class AbstractFetcherThread(name: String, // 线程名称
                                      clientId: String, // ClientId，用于日志输出
-                                     val leader: LeaderEndPoint, // Leader分区所在broker的各项信息,该线程从这些broker上拉取数据
+                                     val leader: LeaderEndPoint, // Leader 分区所在 Broker 的信息和一些要使用的方法，有 Remote 和 Local 两种实现
                                      failedPartitions: FailedPartitions, // 处理过程中出现失败的分区集合
-                                     val fetchTierStateMachine: TierStateMachine, // fetchTierStateMachine表示获取操作的状态机。它主要用于控制获取过程的状态流转。
+                                     val fetchTierStateMachine: TierStateMachine, // 使用分层存储时副本的状态机
                                      fetchBackOffMs: Int = 0, // 重试间隔时间，即replica.fetch.backoff.ms
                                      isInterruptible: Boolean = true, // 线程是否允许中断
                                      val brokerTopicStats: BrokerTopicStats) //Broker端主题的各类监控指标，常见的有MessagesInPerSec、BytesInPerSec等
@@ -147,7 +147,7 @@ abstract class AbstractFetcherThread(name: String, // 线程名称
   private def handlePartitionsWithErrors(partitions: Iterable[TopicPartition], methodName: String): Unit = {
     if (partitions.nonEmpty) {
       debug(s"Handling errors in $methodName for partitions $partitions")
-      delayPartitions(partitions, fetchBackOffMs) // 真正处理错误的地方
+      delayPartitions(partitions, fetchBackOffMs) // 真正处理错误的地方,做法是将报错的 Partition 放到LinkedHashMap最后进行处理
     }
   }
 

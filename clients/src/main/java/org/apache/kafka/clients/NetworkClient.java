@@ -459,6 +459,7 @@ public class NetworkClient implements KafkaClient {
      * @param now the current timestamp
      */
     private boolean canSendRequest(String node, long now) {
+        // 检查 Channel 是否已经就绪。并且检查当前已发送但未响应的请求是否已经达到上限，要是有很多这种请求存在，可能是 broker 宕机了或是 broker 处理能力不足，此时也不适合继续发送请求。
         return connectionStates.isReady(node, now) && selector.isChannelReady(node) &&
             inFlightRequests.canSendMore(node);
     }

@@ -79,7 +79,7 @@ case class ReplicaAssignment private (replicas: Seq[Int], // 分配给分区的b
 class ControllerContext extends ControllerChannelContext {
   val stats = new ControllerStats // Controller统计信息类
   var offlinePartitionCount = 0 // 离线分区计数器
-  var preferredReplicaImbalanceCount = 0
+  var preferredReplicaImbalanceCount = 0 // 优先副本不均衡计数器
   val shuttingDownBrokerIds = mutable.Set.empty[Int] // 关闭中Broker的Id列表
   private val liveBrokers = mutable.Set.empty[Broker] // 当前运行中的Broker对象列表
   private val liveBrokerEpochs = mutable.Map.empty[Int, Long] // 运行中Broker Epoch列表
@@ -404,12 +404,19 @@ class ControllerContext extends ControllerChannelContext {
     updatePartitionStateMetrics(partition, currentState, targetState)
   }
 
+  // 更新offlinePartitionCount元数据
   private def updatePartitionStateMetrics(partition: TopicPartition,
                                           currentState: PartitionState,
                                           targetState: PartitionState): Unit = {
+    // 如果该主题当前并未处于删除中状态
     if (!isTopicDeletionInProgress(partition.topic)) {
+      // targetState表示该分区要变更到的状态
+      // 如果当前状态不是OfflinePartition，即离线状态并且目标状态是离线状态
+      // 这个if语句判断是否要将该主题分区状态转换到离线状态
       if (currentState != OfflinePartition && targetState == OfflinePartition) {
         offlinePartitionCount = offlinePartitionCount + 1
+        // 如果当前状态已经是离线状态，但targetState不是
+        // 这个else if语句判断是否要将该主题分区状态转换到非离线状态
       } else if (currentState == OfflinePartition && targetState != OfflinePartition) {
         offlinePartitionCount = offlinePartitionCount - 1
       }

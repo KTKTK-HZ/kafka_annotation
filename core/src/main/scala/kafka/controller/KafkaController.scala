@@ -597,14 +597,20 @@ class KafkaController(val config: KafkaConfig,
    */
   private def onBrokerFailure(deadBrokers: Seq[Int]): Unit = {
     info(s"Broker failure callback for ${deadBrokers.mkString(",")}")
+    // deadBrokers：给定的一组已终止运行的Broker Id列表
+    // 更新Controller元数据信息，将给定Broker从元数据的replicasOnOfflineDirs中移除
     deadBrokers.foreach(controllerContext.replicasOnOfflineDirs.remove)
+    // 获取正在关闭的 Broker 列表，并将相应 broker 从shuttingDownBrokerIds删除
     val deadBrokersThatWereShuttingDown =
       deadBrokers.filter(id => controllerContext.shuttingDownBrokerIds.remove(id))
-    if (deadBrokersThatWereShuttingDown.nonEmpty)
+    if (deadBrokersThatWereShuttingDown.nonEmpty) {
       info(s"Removed ${deadBrokersThatWereShuttingDown.mkString(",")} from list of shutting down brokers.")
+    }
+    // 获取 deadBrokers 上的所有副本
     val allReplicasOnDeadBrokers = controllerContext.replicasOnBrokers(deadBrokers.toSet)
+    // 执行副本清扫工作
     onReplicasBecomeOffline(allReplicasOnDeadBrokers)
-
+    // 取消这些Broker上注册的ZooKeeper监听器
     unregisterBrokerModificationsHandler(deadBrokers)
   }
 
@@ -2741,7 +2747,11 @@ private[controller] class ControllerStats {
   private val metricsGroup = new KafkaMetricsGroup(this.getClass)
   // 统计每秒发生的Unclean Leader选举次数
   val uncleanLeaderElectionRate = metricsGroup.newMeter("UncleanLeaderElectionsPerSec", "elections", TimeUnit.SECONDS)
-  // Controller事件通用的统计速率指标的方法
+  /**
+   * 统计所有Controller状态的速率和时间信息，单位是毫秒。当前，Controller定义了很多事件。
+   * 比如，TopicDeletion是执行主题删除的Controller事件、ControllerChange是执行Controller重选举的事件。
+   * ControllerStats的这个指标通过在每个事件名后拼接字符串RateAndTimeMs的方式，为每类Controller事件都创建了对应的速率监控指标
+   * */
   val rateAndTimeMetrics: Map[ControllerState, Timer] = ControllerState.values.flatMap { state =>
     state.rateAndTimeMetricName.map { metricName =>
       state -> metricsGroup.newTimer(metricName, TimeUnit.MILLISECONDS, TimeUnit.SECONDS)

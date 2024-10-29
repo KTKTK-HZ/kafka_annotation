@@ -29,6 +29,7 @@ import org.apache.kafka.common.errors.ControllerMovedException
 import org.apache.zookeeper.KeeperException.Code
 import scala.collection.{Seq, mutable}
 
+// 副本状态机管理着 Kafka 集群中多有副本的状态和状态转换。每个 Broker 在启动时都会创建副本状态机，但是只有该 Broker 被选举为 Controller 之后才会进行工作
 abstract class ReplicaStateMachine(controllerContext: ControllerContext) extends Logging {
   /**
    * Invoked on successful controller election.
@@ -107,13 +108,17 @@ class ZkReplicaStateMachine(config: KafkaConfig,
   override def handleStateChanges(replicas: Seq[PartitionAndReplica], targetState: ReplicaState): Unit = {
     if (replicas.nonEmpty) {
       try {
+        // 清空 Controller待发送请求集合
         controllerBrokerRequestBatch.newBatch()
+        // 将所有副本对象按照Broker进行分组，依次执行状态转换操作
         replicas.groupBy(_.replica).forKeyValue { (replicaId, replicas) =>
           doHandleStateChanges(replicaId, replicas, targetState)
         }
+        // 发送对应的Controller请求给Broker
         controllerBrokerRequestBatch.sendRequestsToBrokers(controllerContext.epoch)
       } catch {
         case e: ControllerMovedException =>
+          // 如果Controller易主，则记录错误日志然后抛出异常
           error(s"Controller moved to another broker when moving some replicas to $targetState state", e)
           throw e
         case e: Throwable => error(s"Error while moving some replicas to $targetState state", e)

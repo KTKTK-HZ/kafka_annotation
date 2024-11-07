@@ -1648,13 +1648,13 @@ class KafkaController(val config: KafkaConfig,
   }
 
   private def processTopicChange(): Unit = {
-    if (!isActive) return
-    val topics = zkClient.getAllTopicsInCluster(true)
-    val newTopics = topics -- controllerContext.allTopics
-    val deletedTopics = controllerContext.allTopics.diff(topics)
-    controllerContext.setAllTopics(topics)
+    if (!isActive) return // 如果当前实例不是 Controller，则直接返回
+    val topics = zkClient.getAllTopicsInCluster(true) // 从 zk 上获取所有 Topic 的列表
+    val newTopics = topics -- controllerContext.allTopics // 找出当前元数据中不存在，但是 zk 上存在的 Topic
+    val deletedTopics = controllerContext.allTopics.diff(topics) // 找出allTopics中存在，但是 topics 中不存在吃的 Topic，视为已删除主题
+    controllerContext.setAllTopics(topics) // 更新Controller元数据
 
-    registerPartitionModificationsHandlers(newTopics.toSeq)
+    registerPartitionModificationsHandlers(newTopics.toSeq) // 为新增主题和已删除主题执行后续处理操作
     val addedPartitionReplicaAssignment = zkClient.getReplicaAssignmentAndTopicIdForTopics(newTopics)
     deletedTopics.foreach(controllerContext.removeTopic)
     processTopicIds(addedPartitionReplicaAssignment)

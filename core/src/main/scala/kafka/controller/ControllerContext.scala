@@ -167,7 +167,7 @@ class ControllerContext extends ControllerChannelContext {
   def updatePartitionFullReplicaAssignment(topicPartition: TopicPartition, newAssignment: ReplicaAssignment): Unit = {
     val assignments = partitionAssignments.getOrElseUpdate(topicPartition.topic, mutable.Map.empty)
     val previous = assignments.put(topicPartition.partition, newAssignment)
-    val leadershipInfo = partitionLeadershipInfo.get(topicPartition)
+    val leadershipInfo = partitionLeadershipInfo.get(topicPartition) // 获取指定TopicPartition的Leader/ISR信息
     updatePreferredReplicaImbalanceMetric(topicPartition, previous, leadershipInfo,
       Some(newAssignment), leadershipInfo)
   }
@@ -223,7 +223,7 @@ class ControllerContext extends ControllerChannelContext {
   def liveOrShuttingDownBrokers: Set[Broker] = liveBrokers
   def liveBrokerIdAndEpochs: Map[Int, Long] = liveBrokerEpochs
   def liveOrShuttingDownBroker(brokerId: Int): Option[Broker] = liveOrShuttingDownBrokers.find(_.id == brokerId)
-
+  // 获取某个 Broker 上的所有分区
   def partitionsOnBroker(brokerId: Int): Set[TopicPartition] = {
     partitionAssignments.flatMap {
       case (topic, topicReplicaAssignment) => topicReplicaAssignment.filter {
@@ -264,7 +264,7 @@ class ControllerContext extends ControllerChannelContext {
       }
     }.toSet
   }
-
+  // 获取指定Topic的所有分区
   def partitionsForTopic(topic: String): collection.Set[TopicPartition] = {
     partitionAssignments.getOrElse(topic, mutable.Map.empty).map {
       case (partition, _) => new TopicPartition(topic, partition)
@@ -508,7 +508,7 @@ class ControllerContext extends ControllerChannelContext {
 
   def clearPartitionLeadershipInfo(): Unit = partitionLeadershipInfo.clear() // 清理每个分区的leader和ISR信息
 
-  def partitionWithLeadersCount: Int = partitionLeadershipInfo.size
+  def partitionWithLeadersCount: Int = partitionLeadershipInfo.size // 统计现在有多少个分区拥有 leader
 
   private def updatePreferredReplicaImbalanceMetric(partition: TopicPartition,
                                                     oldReplicaAssignment: Option[ReplicaAssignment],

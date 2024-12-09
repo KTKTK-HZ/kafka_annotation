@@ -631,21 +631,21 @@ class ReplicaManager(val config: KafkaConfig, // kafka配置管理类
       val localProduceResults = appendToLocalLog(internalTopicsAllowed = internalTopicsAllowed,
         origin, entriesPerPartition, requiredAcks, requestLocal)
       debug("Produce to local log in %d ms".format(time.milliseconds - sTime))
-
+      // 将生产的结果构造成一个结果映射
       val produceStatus = localProduceResults.map { case (topicPartition, result) =>
         topicPartition -> ProducePartitionStatus(
-          result.info.lastOffset + 1, // required offset
+          result.info.lastOffset + 1, // required offset，下一个消息应该写入的偏移量
           new PartitionResponse(
             result.error,
-            result.info.firstOffset.map[Long](_.messageOffset).orElse(-1L),
-            result.info.logAppendTime,
-            result.info.logStartOffset,
-            result.info.recordErrors,
-            result.info.errorMessage
+            result.info.firstOffset.map[Long](_.messageOffset).orElse(-1L), // 表示此批次第一条记录的偏移量，如果不存在则返回-1
+            result.info.logAppendTime, // 表示这批记录被追加到日志的时间戳
+            result.info.logStartOffset, // 表示日志开始的偏移量，对于新创建的日志段，这将是0
+            result.info.recordErrors, // 可能包含每条记录的具体错误信息
+            result.info.errorMessage // 可能是与整个批次相关的额外错误信息
           )
         ) // response status
       }
-      // actionQueue用于收集延迟操作
+      // actionQueue用于收集延迟操作，这段代码的主要目的是确保在本地生产操作完成后，能够根据高水位的变化正确地处理和解除延迟操作的阻塞状态
       actionQueue.add {
         () =>
           localProduceResults.foreach {

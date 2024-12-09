@@ -568,6 +568,7 @@ class KafkaApis(val requestChannel: RequestChannel, // 请求通道
   def handleProduceRequest(request: RequestChannel.Request, requestLocal: RequestLocal): Unit = {
     val produceRequest = request.body[ProduceRequest]
 
+    // 如果有事物相关的消息，则需要校验相关事务 Id 有没有权限
     if (RequestUtils.hasTransactionalRecords(produceRequest)) {
       val isAuthorizedTransactional = produceRequest.transactionalId != null &&
         authHelper.authorize(request.context, WRITE, TRANSACTIONAL_ID, produceRequest.transactionalId)
@@ -584,7 +585,9 @@ class KafkaApis(val requestChannel: RequestChannel, // 请求通道
     // 缓存有权限的topic名，避免多余的鉴权调用
     val authorizedTopics = authHelper.filterByAuthorized(request.context, WRITE, TOPIC,
       produceRequest.data().topicData().asScala)(_.name())
-    // 下面使用的两个 foreach 相当于两个 for 循环，主要是将每个topic和存储其数据的memoryRecords放入authorizedRequestInfo中
+    /**
+     * 下面使用的两个 foreach 相当于两个 for 循环，主要是将每个partition和存储其数据的memoryRecords（要生产的数据）放入authorizedRequestInfo中
+     * */
     produceRequest.data.topicData.forEach(topic => topic.partitionData.forEach { partition =>
       val topicPartition = new TopicPartition(topic.name, partition.index)
       // This caller assumes the type is MemoryRecords and that is true on current serialization
@@ -598,6 +601,7 @@ class KafkaApis(val requestChannel: RequestChannel, // 请求通道
       else
         try {
           ProduceRequest.validateRecords(request.header.apiVersion, memoryRecords)
+          // 将分区和其对应的数据放入Map authorizedRequestInfo中
           authorizedRequestInfo += (topicPartition -> memoryRecords)
         } catch {
           case e: ApiException =>
@@ -611,9 +615,10 @@ class KafkaApis(val requestChannel: RequestChannel, // 请求通道
     // https://issues.apache.org/jira/browse/KAFKA-10730
     @nowarn("cat=deprecation")
     def sendResponseCallback(responseStatus: Map[TopicPartition, PartitionResponse]): Unit = {
+      // 将正常的响应状态与之前收集的未授权主题、不存在的主题/分区、以及无效请求的响应状态合并，形成最终的响应状态。
       val mergedResponseStatus = responseStatus ++ unauthorizedTopicResponses ++ nonExistingTopicResponses ++ invalidRequestResponses
       var errorInResponse = false
-
+      // 遍历mergedResponseStatus集合，如果发现有错误则将 errorInResponse 设置成 true并且记录 debug 级别的日志
       mergedResponseStatus.forKeyValue { (topicPartition, status) =>
         if (status.error != Errors.NONE) {
           errorInResponse = true
@@ -624,17 +629,19 @@ class KafkaApis(val requestChannel: RequestChannel, // 请求通道
             status.error.exceptionName))
         }
       }
-
+      // 进行配额检查和流量控制
       // Record both bandwidth and request quota-specific values and throttle by muting the channel if any of the quotas
       // have been violated. If both quotas have been violated, use the max throttle time between the two quotas. Note
       // that the request quota is not enforced if acks == 0.
       val timeMs = time.milliseconds()
       val requestSize = request.sizeInBytes
       val bandwidthThrottleTimeMs = quotas.produce.maybeRecordAndGetThrottleTimeMs(request, requestSize, timeMs)
+      // 分别计算带宽配额和请求配额的流量控制时间（throttle time），对于acks == 0的情况，不应用请求配额。
       val requestThrottleTimeMs =
         if (produceRequest.acks == 0) 0
         else quotas.request.maybeRecordAndGetThrottleTimeMs(request, timeMs)
       val maxThrottleTimeMs = Math.max(bandwidthThrottleTimeMs, requestThrottleTimeMs)
+      // 如果需要进行流量控制，则设置API的流量控制时间，并执行相应的流量控制操作。
       if (maxThrottleTimeMs > 0) {
         request.apiThrottleTimeMs = maxThrottleTimeMs
         if (bandwidthThrottleTimeMs > requestThrottleTimeMs) {
@@ -645,6 +652,8 @@ class KafkaApis(val requestChannel: RequestChannel, // 请求通道
       }
 
       // Send the response immediately. In case of throttling, the channel has already been muted.
+      // 如果有错误发生且acks == 0，则关闭连接以通知客户端发生错误。
+      // 如果没有错误，则发送一个不执行流量控制的空操作响应。
       if (produceRequest.acks == 0) {
         // no operation needed if producer request.required.acks = 0; however, if there is any error in handling
         // the request, since no response is expected by the producer, the server will close socket server so that

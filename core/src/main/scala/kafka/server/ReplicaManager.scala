@@ -645,7 +645,7 @@ class ReplicaManager(val config: KafkaConfig, // kafka配置管理类
           )
         ) // response status
       }
-      // actionQueue用于收集延迟操作，这段代码的主要目的是确保在本地生产操作完成后，能够根据高水位的变化正确地处理和解除延迟操作的阻塞状态
+      // actionQueue用于收集延迟操作。这段代码的主要目的是确保在本地生产操作完成后，能够根据高水位的变化正确地处理和解除延迟操作的阻塞状态
       actionQueue.add {
         () =>
           localProduceResults.foreach {
